@@ -35,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center justify-between h-16">
           {/* Zone 1: Wordmark & Firebase Cloud indicator */}
           <div className="flex items-center gap-3 shrink-0">
-            <MediaPrimaLogo height={34} showBadge={true} />
+            <MediaPrimaLogo height={32} showBadge={false} />
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-sm sm:text-base font-bold text-slate-900 tracking-tight whitespace-nowrap block">

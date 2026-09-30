@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { Employee, MRFRecord } from '../types/hr';
 import { formatDate, formatCurrency, addMonths } from '../utils/dateUtils';
+import { MediaPrimaLogo } from './MediaPrimaLogo';
 import {
   X,
   Printer,
@@ -777,17 +778,7 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
               {/* Official MPB (Media Prima Berhad) Logo & Header */}
               <div className="flex items-start justify-between pb-3 border-b-2 border-black">
                 <div className="flex items-center gap-2">
-                  <div className="inline-flex items-center overflow-hidden rounded-xs border border-black shrink-0">
-                    <span className="bg-[#E11D24] text-white font-black text-xs sm:text-sm px-2 py-0.5 tracking-tight">
-                      media
-                    </span>
-                    <span className="bg-[#111111] text-white font-black text-xs sm:text-sm px-2 py-0.5 tracking-tight">
-                      prima
-                    </span>
-                  </div>
-                  <div className="bg-black text-white font-black text-[11px] px-1.5 py-0.5 rounded-xs tracking-wider">
-                    MPB
-                  </div>
+                  <MediaPrimaLogo height={28} showBadge={true} />
                 </div>
                 <div className="text-right">
                   <div className="font-black text-xs uppercase tracking-wider text-black">
