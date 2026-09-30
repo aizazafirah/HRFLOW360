@@ -1,0 +1,8 @@
+{
+  "name": "Remix HR Renewal, Probation \u0026 Letter Management System (HR-RPM)",
+  "description": "Enterprise HR operations platform for Malaysian corporate contract renewals, probation appraisals, HOD notification emails, Manpower Requisition Forms (MRF), and corporate letter generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
