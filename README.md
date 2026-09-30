@@ -1,10 +1,30 @@
 # Media Prima Berhad (MPB) - HR Renewal, Probation & Letter Management System
 
 [![AI Studio Applet](https://img.shields.io/badge/AI%20Studio-Applet%20Live-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.studio/apps/142826ab-625d-486a-8c9c-0ee56a57443b)
-[![Branding](https://img.shields.io/badge/Media%20Prima%20Berhad-MPB-E11D24?style=for-the-badge)](https://ai.studio/apps/142826ab-625d-486a-8c9c-0ee56a57443b)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Test%20App-00C853?style=for-the-badge&logo=vercel&logoColor=white)](https://ai.studio/apps/142826ab-625d-486a-8c9c-0ee56a57443b)
+[![Branding](https://img.shields.io/badge/Media%20Prima%20Berhad-MPB-ED1D24?style=for-the-badge)](https://ai.studio/apps/142826ab-625d-486a-8c9c-0ee56a57443b)
 
-🔗 **Pautan Rasmi AI Studio / Live App Link**:  
+---
+
+## 🚀 Pautan Langsung & Ujian (Live Demo & Testing)
+
+Untuk memudahkan mana-mana pengguna lain mengakses, mencuba dan menguji sistem ini secara langsung tanpa perlu memasang sebarang perisian:
+
+🔗 **Pautan Rasmi Aplikasi (Live AI Studio Applet)**:  
 👉 **[https://ai.studio/apps/142826ab-625d-486a-8c9c-0ee56a57443b](https://ai.studio/apps/142826ab-625d-486a-8c9c-0ee56a57443b)**
+
+```
+https://ai.studio/apps/142826ab-625d-486a-8c9c-0ee56a57443b
+```
+
+### 🧪 Panduan Cepat Ujian (Quick Testing Guide for Users):
+1. **Akses Terus**: Buka pautan di atas pada mana-mana pelayar web (Chrome, Edge, Safari, Firefox).
+2. **Borang Kosong MRF**: Klik butang **"Borang Kosong MRF"** di bar navigasi atas untuk melihat format rasmi borang kosong tanpa butiran staf, serta pilihan muat turun Word (.doc), PDF resolusi tinggi, atau cetak A4.
+3. **Notifikasi Emel Jabatan**: Klik butang **"Notify HOD"** pada senarai pekerja untuk mencuba jana draf emel rasmi bersama pautan pengisian digital bagi jabatan (`?action=mrf&department=...`).
+4. **Penjanaan Surat Rasmi**: Klik **"Letter (PDF / Print)"** pada mana-mana rekod untuk melihat surat rasmi (*Extension of Fixed-term Contract*, *Confirmation of Performance*, dll) dan muat turun PDF / cetak A4 terus.
+5. **Pangkalan Data Awan**: Data diselaraskan secara langsung menggunakan Firebase Firestore & Google / Email Authentication.
+
+---
 
 An enterprise-grade HR operations management platform designed for Malaysian corporate environments (**Media Prima Berhad Group Human Capital - MPB**) to streamline fixed-term contract renewals, probation appraisals, Head of Department (HOD) notifications, blank Manpower Requisition Form (MRF) workflows, official corporate letter generation, and real-time cloud synchronization with Firebase Firestore & Authentication.
 
@@ -13,11 +33,11 @@ An enterprise-grade HR operations management platform designed for Malaysian cor
 ## 🌟 Key Features & Latest Updates
 
 ### 1. 🏢 Media Prima Berhad (MPB) Official Identity & Logo
-- **Official MPB Vector Branding**:
-  - Dual-block corporate vector logo featuring the iconic Media Prima Red (`#E11D24`) box with bold `media` typography alongside Jet Black (`#111111`) box with `prima`.
-  - Accompanied by the official **MPB** corporate insignia badge and *MEDIA PRIMA BERHAD* corporate title.
+- **Official Media Prima Vector Logo**:
+  - Exact corporate vector logo featuring the iconic Media Prima Red (`#ED1D24`) box with white `media` wordmark alongside the solid black (`#111827`) `prima` wordmark directly beside it.
+  - Accurate corporate identity adhering to official Media Prima brand guidelines.
   - Complete elimination of old "RPM" branding in favor of official **MPB** corporate identification across headers, document templates, table exports, and metadata.
-  - Custom SVG favicon with official MPB dual-block styling.
+  - Custom SVG favicon with official Media Prima logo styling.
 
 ### 2. 📋 Borang Kosong MRF (Blank Attachment & Department Digital Fill Link)
 - **Zero Staff Details Requirement on Blank MRF**:
@@ -95,7 +115,7 @@ An enterprise-grade HR operations management platform designed for Malaysian cor
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Getting Started Locally
 
 ```bash
 # Install dependencies
