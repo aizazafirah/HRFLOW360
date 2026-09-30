@@ -28,6 +28,7 @@ import { CorporateLetterModal } from './components/CorporateLetterModal';
 import { EmployeeEditModal } from './components/EmployeeEditModal';
 import { ActivityLogModal } from './components/ActivityLogModal';
 import { DepartmentSummaryView } from './components/DepartmentSummaryView';
+import { generateLetterContent } from './utils/letterTemplates';
 import { Check, AlertCircle, Info, X } from 'lucide-react';
 
 export default function App() {
@@ -310,6 +311,123 @@ export default function App() {
     showToast(`Official letter issued! Status transitioned to "Completed".`, 'success');
   };
 
+  // Quick Download Letter (.doc) directly from table row
+  const handleQuickDownloadLetter = (emp: Employee) => {
+    try {
+      const template = emp.letterData?.templateType || (emp.actionType === 'Probation Confirmation' ? 'confirmation_work' : 'extension_contract');
+      const letter = generateLetterContent(emp, template);
+      const docHtml = `<!DOCTYPE html>
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+  <meta charset='utf-8'>
+  <title>${letter.title}</title>
+  <!--[if gte mso 9]>
+  <xml>
+    <w:WordDocument>
+      <w:View>Print</w:View>
+      <w:Zoom>100</w:Zoom>
+      <w:DoNotOptimizeForBrowser/>
+    </w:WordDocument>
+  </xml>
+  <![endif]-->
+  <style>
+    @page { size: A4; margin: 25mm 25mm 25mm 25mm; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.35; color: #000; margin: 0; }
+    .top-header { width: 100%; margin-bottom: 24pt; }
+    .top-header table { width: 100%; border: none; border-collapse: collapse; }
+    .top-header td { border: none; padding: 0; font-size: 11pt; }
+    .recipient { margin-bottom: 18pt; line-height: 1.3; font-size: 11pt; }
+    .recipient-name { font-weight: bold; text-transform: uppercase; }
+    .salutation { margin-bottom: 16pt; font-size: 11pt; }
+    .title { font-weight: bold; font-size: 11pt; text-transform: uppercase; margin-bottom: 4pt; }
+    .divider { border-top: 2px solid #000; margin: 4pt 0 16pt 0; height: 0; }
+    p { margin: 0 0 12pt 0; text-align: justify; line-height: 1.35; }
+    .signatory { margin-top: 20pt; line-height: 1.3; font-size: 11pt; }
+    .signature-space { height: 45pt; }
+    .signatory-name { font-weight: bold; }
+    .initials { color: #64748b; font-size: 9pt; }
+    .acceptance-section { margin-top: 26pt; page-break-inside: avoid; }
+    .acceptance-table { border-collapse: collapse; width: 65%; margin-top: 12pt; }
+    .acceptance-table td { border: 1px solid #000; padding: 6pt 10pt; font-size: 10pt; }
+    .acceptance-table .label-cell { background-color: #e2e8f0; font-weight: bold; width: 120pt; }
+  </style>
+</head>
+<body>
+  <div class="top-header">
+    <table style="width: 100%;">
+      <tr>
+        <td style="text-align: left;">${letter.date}</td>
+        <td style="text-align: right; font-weight: bold;">${letter.confidentialNotice}</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="recipient">
+    <div class="recipient-name">${letter.recipient.staffId} ${letter.recipient.name.toUpperCase()}</div>
+    <div>Through the ${letter.hodName}</div>
+    <div>&lt;${letter.recipient.department.toUpperCase()}&gt;</div>
+  </div>
+
+  <div class="salutation">
+    ${letter.salutation}
+  </div>
+
+  <div class="title">${letter.title}</div>
+  <div class="divider"></div>
+
+  ${letter.paragraphs.map((p) => `<p>${p}</p>`).join('\n  ')}
+
+  <div class="signatory">
+    <div>Yours faithfully</div>
+    <div style="font-weight: bold;">&lt;${letter.signatory.company}&gt;</div>
+    <div class="signature-space"></div>
+    <div class="signatory-name">${letter.signatory.name}</div>
+    <div>${letter.signatory.title}</div>
+    <div class="initials">${letter.signatory.initials || 'syl/aiz'}</div>
+  </div>
+
+  ${letter.hasAcceptanceSlip ? `
+  <div class="acceptance-section">
+    <p style="font-size: 10.5pt; text-align: justify;">${letter.acceptanceText}</p>
+    <table class="acceptance-table">
+      <tr>
+        <td class="label-cell">SIGNATURE</td>
+        <td style="height: 38pt;"></td>
+      </tr>
+      <tr>
+        <td class="label-cell">NRIC</td>
+        <td style="height: 24pt;"></td>
+      </tr>
+      <tr>
+        <td class="label-cell">DATE</td>
+        <td style="height: 24pt;"></td>
+      </tr>
+    </table>
+  </div>
+  ` : ''}
+</body>
+</html>`;
+
+      const blob = new Blob(['\ufeff', docHtml], { type: 'application/msword;charset=utf-8' });
+      const filename = `${emp.employeeCode}_Renewal_Letter.doc`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 300);
+
+      showToast(`Downloaded letter for ${emp.name} (${filename}).`, 'success');
+    } catch (err) {
+      console.error('Download letter error:', err);
+      showToast('Could not download letter automatically.', 'warning');
+    }
+  };
+
   // Add / Edit Employee
   const handleOpenAddEmployee = () => {
     setSelectedEditEmployee(null);
@@ -387,60 +505,67 @@ export default function App() {
 
   // Export CSV
   const handleExportCSV = () => {
-    const headers = [
-      'Employee Code',
-      'Full Name',
-      'NRIC',
-      'Business Unit',
-      'Department',
-      'Position Title',
-      'Grade',
-      'Action Type',
-      'Date Joined',
-      'Expiry / Review Date',
-      'Days to Due',
-      'Workflow Status',
-      'Salary (MYR)',
-      'Superior Name',
-      'HOD Name',
-      'Remarks',
-    ];
+    try {
+      const headers = [
+        'Employee Code',
+        'Full Name',
+        'NRIC',
+        'Business Unit',
+        'Department',
+        'Position Title',
+        'Grade',
+        'Action Type',
+        'Date Joined',
+        'Expiry / Review Date',
+        'Days to Due',
+        'Workflow Status',
+        'Salary (MYR)',
+        'Superior Name',
+        'HOD Name',
+        'Remarks',
+      ];
 
-    const rows = sortedEmployees.map((e) => {
-      const days = calculateDaysToDue(e.contractExpiryDate);
-      return [
-        `"${e.employeeCode}"`,
-        `"${e.name}"`,
-        `"${e.nric}"`,
-        `"${e.businessUnit}"`,
-        `"${e.department}"`,
-        `"${e.positionTitle}"`,
-        `"${e.jobGrade}"`,
-        `"${e.actionType}"`,
-        `"${e.dateJoined}"`,
-        `"${e.contractExpiryDate}"`,
-        days,
-        `"${e.status}"`,
-        e.currentSalary,
-        `"${e.superiorName}"`,
-        `"${e.hodName}"`,
-        `"${(e.remarks || '').replace(/"/g, '""')}"`,
-      ].join(',');
-    });
+      const rows = sortedEmployees.map((e) => {
+        const days = calculateDaysToDue(e.contractExpiryDate);
+        return [
+          `"${e.employeeCode}"`,
+          `"${e.name}"`,
+          `"${e.nric}"`,
+          `"${e.businessUnit}"`,
+          `"${e.department}"`,
+          `"${e.positionTitle}"`,
+          `"${e.jobGrade}"`,
+          `"${e.actionType}"`,
+          `"${e.dateJoined}"`,
+          `"${e.contractExpiryDate}"`,
+          days,
+          `"${e.status}"`,
+          e.currentSalary,
+          `"${e.superiorName}"`,
+          `"${e.hodName}"`,
+          `"${(e.remarks || '').replace(/"/g, '""')}"`,
+        ].join(',');
+      });
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute(
-      'download',
-      `HR_RPM_Export_${new Date().toISOString().slice(0, 10)}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      const csvContent = [headers.join(','), ...rows].join('\r\n');
+      const blob = new Blob(['\ufeff', csvContent], { type: 'text/csv;charset=utf-8;' });
+      const filename = `HR_RPM_Export_${new Date().toISOString().slice(0, 10)}.csv`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 300);
 
-    showToast(`Exported ${sortedEmployees.length} records to CSV file.`, 'info');
+      showToast(`Exported ${sortedEmployees.length} records to ${filename}.`, 'success');
+    } catch (err) {
+      console.error('Export CSV failed:', err);
+      showToast('Could not download file. Please check browser permissions.', 'warning');
+    }
   };
 
   // Clear Activity Logs
@@ -515,6 +640,7 @@ export default function App() {
               onSort={handleSort}
               onOpenMRF={handleOpenMRF}
               onOpenLetter={handleOpenLetter}
+              onDownloadLetter={handleQuickDownloadLetter}
               onEditEmployee={handleOpenEditEmployee}
               onDeleteEmployee={handleDeleteEmployee}
               onStatusChange={handleStatusChange}

@@ -45,6 +45,17 @@ export const formatLongDate = (dateStr: string | null | undefined): string => {
   });
 };
 
+export const formatCorporateDate = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
+
 export const formatMonthYear = (dateStr: string | null | undefined): string => {
   if (!dateStr) return '-';
   const d = new Date(dateStr);

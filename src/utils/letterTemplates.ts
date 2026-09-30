@@ -1,5 +1,5 @@
 import { Employee, LetterTemplateType, LetterRecord } from '../types/hr';
-import { formatLongDate, addMonths, formatDate } from './dateUtils';
+import { formatCorporateDate, addMonths, formatDate } from './dateUtils';
 
 export interface LetterTemplateMetadata {
   id: LetterTemplateType;
@@ -11,15 +11,15 @@ export interface LetterTemplateMetadata {
 export const LETTER_TEMPLATES: LetterTemplateMetadata[] = [
   {
     id: 'extension_contract',
-    name: 'Extension of Fixed-Term Contract',
+    name: 'Extension of Fixed-Term Contract (Renewal Letter)',
     category: 'Contract',
-    description: 'Pre-fills tenure extension period, reporting HOD, terms & employee acceptance slip (14 days).',
+    description: 'Official corporate renewal letter with reporting HOD, tenure period, terms & acceptance table.',
   },
   {
     id: 'confirmation_work',
-    name: 'Confirmation of Work Performance',
+    name: 'Confirmation of Employment',
     category: 'Probation',
-    description: 'Official confirmation letter upon successful completion of probation with permanent terms.',
+    description: 'Official confirmation letter upon successful completion of probation with permanent status.',
   },
   {
     id: 'extension_probation',
@@ -39,6 +39,8 @@ export interface GeneratedLetterContent {
   title: string;
   referenceNumber: string;
   date: string;
+  confidentialNotice: string;
+  salutation: string;
   recipient: {
     name: string;
     staffId: string;
@@ -60,8 +62,9 @@ export interface GeneratedLetterContent {
   signatory: {
     name: string;
     title: string;
-    division: string;
+    division?: string;
     company: string;
+    initials?: string;
   };
 }
 
@@ -70,15 +73,15 @@ export const generateLetterContent = (
   templateType: LetterTemplateType,
   overrides?: Partial<LetterRecord>
 ): GeneratedLetterContent => {
-  const todayFormatted = formatLongDate(overrides?.issueDate || new Date().toISOString());
+  const todayFormatted = formatCorporateDate(overrides?.issueDate || new Date().toISOString());
   const effectiveDate = overrides?.effectiveDate || employee.contractExpiryDate || new Date().toISOString().split('T')[0];
-  const effectiveFormatted = formatLongDate(effectiveDate);
+  const effectiveFormatted = formatCorporateDate(effectiveDate);
 
   const defaultEndDate = employee.mrfData?.proposedEndDate || addMonths(effectiveDate, 12);
-  const endFormatted = formatLongDate(defaultEndDate);
+  const endFormatted = formatCorporateDate(defaultEndDate);
 
   const defaultReviewDate = overrides?.reviewDate || addMonths(effectiveDate, 6);
-  const reviewFormatted = formatLongDate(defaultReviewDate);
+  const reviewFormatted = formatCorporateDate(defaultReviewDate);
 
   const refPrefix = templateType === 'extension_contract'
     ? 'MPB/HC/CON'
@@ -101,18 +104,21 @@ export const generateLetterContent = (
   };
 
   const signatory = {
-    name: 'Datin Seri Norazlina binti Dato\' Hashim',
-    title: 'Group Chief Human Capital Officer',
-    division: 'Group Human Capital Division',
-    company: employee.businessUnit || 'Media Prima Berhad',
+    name: 'SYLVIA SINGARAIM',
+    title: 'General Manager, Human Resources',
+    division: 'Group Human Resources Department',
+    company: employee.businessUnit || 'MEDIA PRIMA BERHAD',
+    initials: 'syl/aiz',
   };
 
   switch (templateType) {
     case 'extension_contract':
       return {
-        title: 'EXTENSION OF FIXED-TERM CONTRACT OF EMPLOYMENT',
+        title: 'EXTENSION OF FIXED-TERM CONTRACT',
         referenceNumber,
         date: todayFormatted,
+        confidentialNotice: 'PRIVATE AND CONFIDENTIAL',
+        salutation: 'Dear Sir / Madam,',
         recipient,
         hodName: employee.hodName,
         superiorName: employee.superiorName,
@@ -120,43 +126,46 @@ export const generateLetterContent = (
         endDate: endFormatted,
         hasAcceptanceSlip: true,
         paragraphs: [
-          `Dear ${employee.name},`,
-          `We are pleased to inform you that the Management of ${employee.businessUnit} has approved the extension of your Fixed-Term Contract of Employment as ${employee.positionTitle}, Grade ${employee.jobGrade}, attached to the ${employee.department}.`,
-          `This extension shall take effect from ${effectiveFormatted} until ${endFormatted}. Throughout this tenure, you will continue to report to your Head of Department, ${employee.hodName}, or any other authorized officer designated by the Management from time to time.`,
-          `Your monthly basic remuneration and designated allowances shall be maintained in accordance with company policy and your verified Manpower Requisition Form (MRF) endorsement.`,
-          `All other terms and conditions of service as stipulated in your Principal Letter of Appointment and the Media Prima Group Employee Handbook shall remain unchanged and continue in full force and effect.`,
-          `Kindly indicate your acceptance of this contract extension by signing and returning the duplicate copy of this letter to the Group Human Capital Division within fourteen (14) days from the date of this letter, failing which this offer shall automatically lapse.`,
+          `Reference is made to our fixed-term contract dated ${formatCorporateDate(employee.dateJoined)}.`,
+          `This is to inform you that your contract period shall be for a term of ${effectiveFormatted} until ${endFormatted} and unless otherwise specified, the fixed-term contract will automatically expire thereafter if the stipulated term of service is not further extended.`,
+          `Your position shall remain as an ${employee.positionTitle} at the Grade ${employee.jobGrade} based at the ${employee.department} Department. You will report to the Head of ${employee.department} Department.`,
+          `Except for the above, your other terms and conditions shall remain unchanged.`,
+          `Kindly sign and return the duplicate of this letter to the undersigned not later than 14 days from the date of this letter.`,
+          `Thank you and best regards.`,
         ],
-        acceptanceText: `I, ${employee.name}, NRIC No. ${employee.nric}, hereby acknowledge receipt and accept the offer of Extension of Fixed-Term Contract of Employment subject to the terms and conditions stated herein.`,
+        acceptanceText: `I have read and understood the above stated terms and conditions and hereby accept the offer of fixed-term contract and agree to abide by the terms and conditions.`,
         signatory,
       };
 
     case 'confirmation_work':
       return {
-        title: 'CONFIRMATION OF EMPLOYMENT & WORK PERFORMANCE',
+        title: 'CONFIRMATION OF EMPLOYMENT',
         referenceNumber,
         date: todayFormatted,
+        confidentialNotice: 'PRIVATE AND CONFIDENTIAL',
+        salutation: 'Dear Sir / Madam,',
         recipient,
         hodName: employee.hodName,
         superiorName: employee.superiorName,
         effectiveDate: effectiveFormatted,
         hasAcceptanceSlip: false,
         paragraphs: [
-          `Dear ${employee.name},`,
-          `On behalf of the Management of ${employee.businessUnit}, we are delighted to inform you that having satisfactorily completed your probationary period, your appointment as ${employee.positionTitle}, Grade ${employee.jobGrade} in the ${employee.department} is hereby confirmed with effect from ${effectiveFormatted}.`,
-          `The Management and your Head of Department, ${employee.hodName}, commend your dedicated work performance, professionalism, and positive contributions to the team during your probationary tenure.`,
-          `Following this confirmation, you shall be entitled to all benefits, leave entitlements, and medical schemes accorded to confirmed permanent employees of the Group, subject to the prevailing company policies and statutory guidelines.`,
-          `We look forward to your continued commitment, exemplary conduct, and ongoing contribution toward achieving the strategic objectives of ${employee.businessUnit}.`,
-          `Please accept our hearty congratulations on your confirmation!`,
+          `Reference is made to your appointment as ${employee.positionTitle} at the Grade ${employee.jobGrade} in the ${employee.department} Department.`,
+          `We are pleased to inform you that having satisfactorily completed your probationary period, your appointment as ${employee.positionTitle} in the ${employee.department} Department is hereby confirmed with effect from ${effectiveFormatted}.`,
+          `Your position shall remain based at the ${employee.department} Department, reporting to the Head of ${employee.department} Department. All other terms and conditions of your employment contract shall remain unchanged.`,
+          `Kindly sign and return the duplicate of this letter to the undersigned not later than 14 days from the date of this letter.`,
+          `Thank you and best regards.`,
         ],
         signatory,
       };
 
     case 'extension_probation':
       return {
-        title: 'EXTENSION OF PROBATIONARY PERIOD & PERFORMANCE IMPROVEMENT PLAN',
+        title: 'EXTENSION OF PROBATIONARY PERIOD',
         referenceNumber,
         date: todayFormatted,
+        confidentialNotice: 'PRIVATE AND CONFIDENTIAL',
+        salutation: 'Dear Sir / Madam,',
         recipient,
         hodName: employee.hodName,
         superiorName: employee.superiorName,
@@ -164,27 +173,24 @@ export const generateLetterContent = (
         reviewDate: reviewFormatted,
         hasAcceptanceSlip: true,
         paragraphs: [
-          `Dear ${employee.name},`,
-          `We refer to your appointment as ${employee.positionTitle}, Grade ${employee.jobGrade}, in the ${employee.department} and your recent probationary performance evaluation conducted with your supervisor, ${employee.superiorName}.`,
-          `Please be advised that the Management has resolved to extend your probationary period for a further duration of six (6) months, commencing from ${effectiveFormatted} until ${reviewFormatted}.`,
-          `This extension is granted to afford you adequate opportunity to enhance your work competencies, bridge identified performance gaps, and satisfy key departmental performance indicators (KPIs).`,
-          `During this extended probationary tenure, you will be placed on a formal Performance Improvement Plan (PIP) supervised directly by ${employee.superiorName}. The primary target deliverables encompass:`,
+          `Reference is made to your employment contract dated ${formatCorporateDate(employee.dateJoined)} as ${employee.positionTitle}, Grade ${employee.jobGrade} in the ${employee.department} Department.`,
+          `We wish to inform you that the Management has resolved to extend your probationary period until ${reviewFormatted} to afford you additional opportunity to meet the expected performance deliverables.`,
+          `Your position shall remain as an ${employee.positionTitle} at the Grade ${employee.jobGrade} based at the ${employee.department} Department, reporting to the Head of ${employee.department} Department.`,
+          `Except for the above, your other terms and conditions shall remain unchanged.`,
+          `Kindly sign and return the duplicate of this letter to the undersigned not later than 14 days from the date of this letter.`,
+          `Thank you and best regards.`,
         ],
-        bulletPoints: [
-          'Adherence to agreed project deadlines and operational turnaround timelines.',
-          'Consistency in output accuracy, documentation rigor, and peer review standards.',
-          'Proactive stakeholder communication and cross-functional collaboration within the team.',
-          'Compliance with standard operating procedures and Group code of conduct.',
-        ],
-        acceptanceText: `I, ${employee.name}, NRIC No. ${employee.nric}, hereby acknowledge receipt of this letter and agree to comply with the Performance Improvement Plan (PIP) during my extended probationary period.`,
+        acceptanceText: `I have read and understood the above stated terms and conditions and hereby accept the extension of probationary period and agree to abide by the terms and conditions.`,
         signatory,
       };
 
     case 'performance_review':
       return {
-        title: 'OFFICIAL PERFORMANCE EVALUATION & APPRAISAL REVIEW',
+        title: 'ANNUAL PERFORMANCE APPRAISAL REVIEW',
         referenceNumber,
         date: todayFormatted,
+        confidentialNotice: 'PRIVATE AND CONFIDENTIAL',
+        salutation: 'Dear Sir / Madam,',
         recipient,
         hodName: employee.hodName,
         superiorName: employee.superiorName,
@@ -192,16 +198,10 @@ export const generateLetterContent = (
         reviewDate: reviewFormatted,
         hasAcceptanceSlip: false,
         paragraphs: [
-          `Dear ${employee.name},`,
-          `This official correspondence serves to record the results of your recent Performance Review for the operational cycle in your role as ${employee.positionTitle}, Grade ${employee.jobGrade}, in the ${employee.department}.`,
-          `Your appraisal was evaluated by ${employee.superiorName} and formally endorsed by your Head of Department, ${employee.hodName}. The evaluation recognizes your consistent engagement and key achievements within the business unit.`,
-          `To sustain high organizational impact and foster your ongoing career progression within ${employee.businessUnit}, the following key development priorities have been established for the next appraisal cycle:`,
-        ],
-        bulletPoints: [
-          'Exceeding key performance milestones outlined in the Annual Operating Plan (AOP).',
-          'Active participation in professional capability building and leadership developmental workshops.',
-          'Mentoring junior team members and enhancing team knowledge-sharing repositories.',
-          'Continuous enhancement of process efficiencies and workflow automation initiatives.',
+          `Reference is made to the annual performance appraisal evaluation conducted for your role as ${employee.positionTitle}, Grade ${employee.jobGrade} in the ${employee.department} Department.`,
+          `Your appraisal has been duly evaluated by ${employee.superiorName} and endorsed by your Head of Department, ${employee.hodName}.`,
+          `Except for the above, your other terms and conditions of employment shall remain unchanged.`,
+          `Thank you and best regards.`,
         ],
         signatory,
       };

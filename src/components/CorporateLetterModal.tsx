@@ -7,6 +7,7 @@ import {
 import {
   X,
   Printer,
+  Download,
   Copy,
   Check,
   CheckCircle2,
@@ -30,7 +31,7 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
 }) => {
   if (!isOpen || !employee) return null;
 
-  // Initial template selection based on employee action type or existing letterData
+  // Initial template selection
   const [selectedTemplate, setSelectedTemplate] = useState<LetterTemplateType>(() => {
     if (employee.letterData?.templateType) return employee.letterData.templateType;
     if (employee.actionType === 'Probation Confirmation') {
@@ -51,6 +52,7 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
   const [showCustomizer, setShowCustomizer] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [issuedSuccess, setIssuedSuccess] = useState<boolean>(false);
+  const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
 
   // Generate the live content based on current template and overrides
   const letter = generateLetterContent(employee, selectedTemplate, customOverrides);
@@ -59,38 +61,146 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
     window.print();
   };
 
+  const handleDownloadWord = () => {
+    try {
+      const docHtml = `<!DOCTYPE html>
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+  <meta charset='utf-8'>
+  <title>${letter.title}</title>
+  <!--[if gte mso 9]>
+  <xml>
+    <w:WordDocument>
+      <w:View>Print</w:View>
+      <w:Zoom>100</w:Zoom>
+      <w:DoNotOptimizeForBrowser/>
+    </w:WordDocument>
+  </xml>
+  <![endif]-->
+  <style>
+    @page { size: A4; margin: 25mm 25mm 25mm 25mm; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.35; color: #000; margin: 0; }
+    .top-header { width: 100%; margin-bottom: 24pt; }
+    .top-header table { width: 100%; border: none; border-collapse: collapse; }
+    .top-header td { border: none; padding: 0; font-size: 11pt; }
+    .recipient { margin-bottom: 18pt; line-height: 1.3; font-size: 11pt; }
+    .recipient-name { font-weight: bold; text-transform: uppercase; }
+    .salutation { margin-bottom: 16pt; font-size: 11pt; }
+    .title { font-weight: bold; font-size: 11pt; text-transform: uppercase; margin-bottom: 4pt; }
+    .divider { border-top: 2px solid #000; margin: 4pt 0 16pt 0; height: 0; }
+    p { margin: 0 0 12pt 0; text-align: justify; line-height: 1.35; }
+    .signatory { margin-top: 20pt; line-height: 1.3; font-size: 11pt; }
+    .signature-space { height: 45pt; }
+    .signatory-name { font-weight: bold; }
+    .initials { color: #64748b; font-size: 9pt; }
+    .acceptance-section { margin-top: 26pt; page-break-inside: avoid; }
+    .acceptance-table { border-collapse: collapse; width: 65%; margin-top: 12pt; }
+    .acceptance-table td { border: 1px solid #000; padding: 6pt 10pt; font-size: 10pt; }
+    .acceptance-table .label-cell { background-color: #e2e8f0; font-weight: bold; width: 120pt; }
+  </style>
+</head>
+<body>
+  <div class="top-header">
+    <table style="width: 100%;">
+      <tr>
+        <td style="text-align: left;">${letter.date}</td>
+        <td style="text-align: right; font-weight: bold;">${letter.confidentialNotice}</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="recipient">
+    <div class="recipient-name">${letter.recipient.staffId} ${letter.recipient.name.toUpperCase()}</div>
+    <div>Through the ${letter.hodName}</div>
+    <div>&lt;${letter.recipient.department.toUpperCase()}&gt;</div>
+  </div>
+
+  <div class="salutation">
+    ${letter.salutation}
+  </div>
+
+  <div class="title">${letter.title}</div>
+  <div class="divider"></div>
+
+  ${letter.paragraphs.map(p => `<p>${p}</p>`).join('\n  ')}
+
+  <div class="signatory">
+    <div>Yours faithfully</div>
+    <div style="font-weight: bold;">&lt;${letter.signatory.company}&gt;</div>
+    <div class="signature-space"></div>
+    <div class="signatory-name">${letter.signatory.name}</div>
+    <div>${letter.signatory.title}</div>
+    <div class="initials">${letter.signatory.initials || 'syl/aiz'}</div>
+  </div>
+
+  ${letter.hasAcceptanceSlip ? `
+  <div class="acceptance-section">
+    <p style="font-size: 10.5pt; text-align: justify;">${letter.acceptanceText}</p>
+    <table class="acceptance-table">
+      <tr>
+        <td class="label-cell">SIGNATURE</td>
+        <td style="height: 38pt;"></td>
+      </tr>
+      <tr>
+        <td class="label-cell">NRIC</td>
+        <td style="height: 24pt;"></td>
+      </tr>
+      <tr>
+        <td class="label-cell">DATE</td>
+        <td style="height: 24pt;"></td>
+      </tr>
+    </table>
+  </div>
+  ` : ''}
+</body>
+</html>`;
+
+      const blob = new Blob(['\ufeff', docHtml], { type: 'application/msword;charset=utf-8' });
+      const filename = `${employee.employeeCode}_${selectedTemplate === 'extension_contract' ? 'Renewal_Letter' : selectedTemplate}.doc`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 300);
+
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 2500);
+    } catch (err) {
+      console.error('Download failed:', err);
+    }
+  };
+
   const handleCopyText = async () => {
     const text = `
-MEDIA PRIMA BERHAD (173295-P)
-Balai Berita, 31 Jalan Riong, Bangsar, 59100 Kuala Lumpur
+${letter.date}                                     ${letter.confidentialNotice}
 
-Ref: ${letter.referenceNumber}
-Date: ${letter.date}
+${letter.recipient.staffId} ${letter.recipient.name.toUpperCase()}
+Through the ${letter.hodName}
+<${letter.recipient.department.toUpperCase()}>
 
-STRICTLY PRIVATE & CONFIDENTIAL
-
-To:
-${letter.recipient.name}
-Staff ID: ${letter.recipient.staffId}
-Position: ${letter.recipient.position} (Grade ${letter.recipient.grade})
-Department: ${letter.recipient.department}
-Business Unit: ${letter.recipient.businessUnit}
+${letter.salutation}
 
 ${letter.title}
+--------------------------------------------------------------------------------
 
 ${letter.paragraphs.join('\n\n')}
 
-${letter.bulletPoints ? letter.bulletPoints.map((b, i) => `${i + 1}. ${b}`).join('\n') : ''}
+Yours faithfully
+<${letter.signatory.company}>
 
-Yours sincerely,
-MEDIA PRIMA BERHAD
+
 
 ${letter.signatory.name}
 ${letter.signatory.title}
-${letter.signatory.division}
+${letter.signatory.initials || 'syl/aiz'}
 
--------------------------------------------------------------
-${letter.hasAcceptanceSlip ? `ACCEPTANCE SLIP:\n${letter.acceptanceText}\n\nSignature: __________________\nName: ${letter.recipient.name}\nNRIC: ${letter.recipient.nric}\nDate: __________________` : ''}
+--------------------------------------------------------------------------------
+${letter.hasAcceptanceSlip ? `${letter.acceptanceText}\n\nSIGNATURE: _____________________\nNRIC:      _____________________\nDATE:      _____________________` : ''}
     `.trim();
 
     try {
@@ -125,52 +235,64 @@ ${letter.hasAcceptanceSlip ? `ACCEPTANCE SLIP:\n${letter.acceptanceText}\n\nSign
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print-document-container">
       <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-4xl w-full overflow-hidden flex flex-col max-h-[95vh] a4-print-sheet">
         {/* Top Control Bar (Hidden on print) */}
-        <div className="no-print px-6 py-3.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+        <div className="no-print px-4 sm:px-6 py-3 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0">
               <FileText className="w-4 h-4" />
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-900">
-                Corporate HR Letter Generator
+                Official Corporate Letter
               </h2>
               <p className="text-[11px] text-slate-500">
-                A4 Print-Ready Document · {employee.name} ({employee.employeeCode})
+                Template Preview · {employee.name} ({employee.employeeCode})
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowCustomizer(!showCustomizer)}
-              className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
+              className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
               <span>{showCustomizer ? 'Hide Variables' : 'Edit Variables'}</span>
             </button>
 
+            {/* DOWNLOAD BUTTON - Fully Functional (.doc file download) */}
             <button
-              onClick={handleCopyText}
-              className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
+              onClick={handleDownloadWord}
+              title="Download letter as Microsoft Word (.doc) document"
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
-              <span>{copied ? 'Copied' : 'Copy Text'}</span>
+              <Download className="w-3.5 h-3.5" />
+              <span>Download Word (.doc)</span>
+            </button>
+
+            {/* PRINT / SAVE PDF BUTTON */}
+            <button
+              onClick={handlePrint}
+              title="Print document or Save as PDF"
+              className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-500" />
+              <span>Print A4 / PDF</span>
             </button>
 
             <button
-              onClick={handlePrint}
-              className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
+              onClick={handleCopyText}
+              className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
             >
-              <Printer className="w-3.5 h-3.5 text-slate-500" />
-              <span>Print / Save PDF</span>
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+              <span>{copied ? 'Copied' : 'Copy'}</span>
             </button>
 
             <button
               onClick={handleMarkIssued}
-              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Mark as Issued & Complete</span>
+              <span>Mark as Issued</span>
             </button>
 
             <button
@@ -183,9 +305,9 @@ ${letter.hasAcceptanceSlip ? `ACCEPTANCE SLIP:\n${letter.acceptanceText}\n\nSign
         </div>
 
         {/* Template Selector Bar (Hidden on print) */}
-        <div className="no-print px-6 py-2.5 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between gap-3 text-xs">
+        <div className="no-print px-4 sm:px-6 py-2.5 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-700">Select Template (4 Options):</span>
+            <span className="font-semibold text-slate-700">Template Type:</span>
             <div className="relative">
               <select
                 value={selectedTemplate}
@@ -246,6 +368,13 @@ ${letter.hasAcceptanceSlip ? `ACCEPTANCE SLIP:\n${letter.acceptanceText}\n\nSign
           </div>
         )}
 
+        {downloadSuccess && (
+          <div className="no-print bg-indigo-50 border-b border-indigo-200 px-6 py-2 text-xs font-medium text-indigo-800 flex items-center gap-2">
+            <Check className="w-4 h-4 text-indigo-600" />
+            <span>Word document (.doc) downloaded successfully!</span>
+          </div>
+        )}
+
         {issuedSuccess && (
           <div className="no-print bg-emerald-50 border-b border-emerald-200 px-6 py-2 text-xs font-medium text-emerald-800 flex items-center gap-2">
             <Check className="w-4 h-4 text-emerald-600" />
@@ -253,140 +382,99 @@ ${letter.hasAcceptanceSlip ? `ACCEPTANCE SLIP:\n${letter.acceptanceText}\n\nSign
           </div>
         )}
 
-        {/* Realistic A4 Paper Letter Layout */}
-        <div className="p-8 sm:p-12 overflow-y-auto space-y-6 text-xs text-slate-900 flex-1 leading-relaxed bg-white">
-          {/* Corporate Letterhead */}
-          <div className="border-b border-slate-900/80 pb-5 mb-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="text-lg font-black tracking-tight text-slate-900 font-serif">
-                  MEDIA PRIMA BERHAD
-                </div>
-                <div className="text-[10px] text-slate-500 font-mono tracking-wider">
-                  Registration No: 173295-P · Incorporated in Malaysia
-                </div>
-                <div className="text-[10px] text-slate-600 mt-1">
-                  Balai Berita, 31 Jalan Riong, Bangsar, 59100 Kuala Lumpur, Malaysia
-                </div>
-                <div className="text-[10px] text-slate-500">
-                  Tel: +603-2724 8888 · Fax: +603-2282 0152 · Web: www.mediaprima.com.my
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="w-12 h-12 border-2 border-slate-900 rounded flex items-center justify-center font-bold text-slate-900 font-serif text-sm">
-                  MPB
-                </div>
-                <div className="text-[9px] uppercase tracking-widest text-slate-400 mt-1 font-semibold">
-                  Human Capital
-                </div>
-              </div>
+        {/* Realistic A4 Paper Letter Layout - Exactly matches PDF 1 */}
+        <div className="p-8 sm:p-14 overflow-y-auto space-y-4 text-xs sm:text-[13px] text-slate-900 flex-1 leading-relaxed bg-white font-sans max-w-3xl mx-auto w-full">
+          {/* Top Line: Date and Private & Confidential */}
+          <div className="flex justify-between items-start pt-2">
+            <div className="text-slate-900 font-normal">
+              {letter.date}
             </div>
-          </div>
-
-          {/* Reference & Date Bar */}
-          <div className="flex justify-between items-start text-xs font-mono text-slate-700">
-            <div>
-              <span className="text-slate-400">Ref: </span>
-              <strong className="text-slate-900">{letter.referenceNumber}</strong>
+            <div className="text-slate-900 font-bold uppercase tracking-wide">
+              {letter.confidentialNotice}
             </div>
-            <div>
-              <span className="text-slate-400">Date: </span>
-              <strong className="text-slate-900">{letter.date}</strong>
-            </div>
-          </div>
-
-          {/* Confidential Notice */}
-          <div className="text-[11px] font-bold text-slate-800 tracking-wider">
-            STRICTLY PRIVATE & CONFIDENTIAL
           </div>
 
           {/* Recipient Details */}
-          <div className="text-xs space-y-0.5 text-slate-800 font-medium">
-            <div className="font-bold text-slate-900 text-sm">{letter.recipient.name}</div>
-            <div>Staff ID: <span className="font-mono">{letter.recipient.staffId}</span></div>
-            <div>NRIC No: <span className="font-mono">{letter.recipient.nric}</span></div>
-            <div>Position: {letter.recipient.position} (Grade {letter.recipient.grade})</div>
-            <div>Department: {letter.recipient.department}</div>
-            <div>{letter.recipient.businessUnit}</div>
+          <div className="pt-4 space-y-0.5 text-slate-900">
+            <div className="font-bold uppercase tracking-tight">
+              &lt;{letter.recipient.staffId}&gt; &lt;{letter.recipient.name.toUpperCase()}&gt;
+            </div>
+            <div>Through the &lt;{letter.hodName}&gt;</div>
+            <div>&lt;{letter.recipient.department.toUpperCase()}&gt;</div>
           </div>
 
-          {/* Letter Title */}
-          <div className="pt-2 pb-1 border-b border-slate-300">
-            <h1 className="text-xs sm:text-sm font-bold uppercase tracking-wide text-slate-900">
+          {/* Salutation */}
+          <div className="pt-3 text-slate-900">
+            {letter.salutation}
+          </div>
+
+          {/* Title with full-width horizontal black line */}
+          <div className="pt-3">
+            <h1 className="text-xs sm:text-[13px] font-bold uppercase tracking-tight text-slate-900">
               {letter.title}
             </h1>
+            <div className="w-full h-[2px] bg-black mt-1.5 mb-3" />
           </div>
 
-          {/* Body Paragraphs */}
-          <div className="space-y-3.5 text-slate-800 text-justify text-xs leading-relaxed">
+          {/* Paragraphs */}
+          <div className="space-y-3.5 text-justify text-slate-900 leading-normal">
             {letter.paragraphs.map((p, idx) => (
               <p key={idx}>{p}</p>
             ))}
-
-            {/* Optional PIP or Development Bullets */}
-            {letter.bulletPoints && (
-              <div className="pl-4 space-y-1.5 text-slate-800 my-2">
-                {letter.bulletPoints.map((b, idx) => (
-                  <div key={idx} className="flex items-start gap-2">
-                    <span className="font-bold font-mono text-slate-600">{idx + 1}.</span>
-                    <span>{b}</span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Signatory Section */}
-          <div className="pt-6 space-y-1 text-xs print-avoid-break">
-            <div>Yours sincerely,</div>
+          <div className="pt-5 space-y-1 print-avoid-break">
+            <div>Yours faithfully</div>
             <div className="font-bold text-slate-900 uppercase">
-              FOR AND ON BEHALF OF {letter.signatory.company}
+              &lt;{letter.signatory.company}&gt;
             </div>
 
-            {/* Official Signature Mark */}
-            <div className="py-4">
-              <div className="font-serif italic text-slate-700 text-sm">
-                ~ Norazlina Hashim ~
-              </div>
-              <div className="w-48 h-px bg-slate-900 mt-2"></div>
-            </div>
+            {/* Signature blank space */}
+            <div className="h-14" />
 
-            <div className="font-bold text-slate-900">{letter.signatory.name}</div>
-            <div className="text-slate-600">{letter.signatory.title}</div>
-            <div className="text-slate-500 text-[11px]">{letter.signatory.division}</div>
+            <div className="font-bold text-slate-900 text-xs sm:text-[13px]">
+              {letter.signatory.name}
+            </div>
+            <div className="text-slate-800 text-xs sm:text-[12px]">
+              {letter.signatory.title}
+            </div>
+            <div className="text-slate-500 text-[10px] lowercase">
+              {letter.signatory.initials || 'syl/aiz'}
+            </div>
           </div>
 
-          {/* Candidate Acceptance Slip (for contract extension & PIP extension) */}
+          {/* Candidate Acceptance Section with Table */}
           {letter.hasAcceptanceSlip && (
-            <div className="mt-8 pt-5 border-t-2 border-dashed border-slate-300 space-y-4 print-avoid-break">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 text-center">
-                EMPLOYEE ACCEPTANCE SLIP (Please return duplicate copy within 14 days)
-              </div>
-
-              <p className="text-xs text-slate-700 leading-relaxed italic">
-                "{letter.acceptanceText}"
+            <div className="pt-6 border-t border-slate-300 space-y-3 print-avoid-break">
+              <p className="text-slate-900 text-justify text-xs sm:text-[12px] leading-relaxed">
+                {letter.acceptanceText}
               </p>
 
-              <div className="grid grid-cols-2 gap-8 pt-4">
-                <div>
-                  <div className="h-10 border-b border-slate-400"></div>
-                  <div className="text-[11px] font-semibold text-slate-900 mt-1">
-                    Employee Signature
-                  </div>
-                  <div className="text-[10px] text-slate-500">
-                    Name: {letter.recipient.name}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="h-10 border-b border-slate-400"></div>
-                  <div className="text-[11px] font-semibold text-slate-900 mt-1">
-                    NRIC / Passport No: {letter.recipient.nric}
-                  </div>
-                  <div className="text-[10px] text-slate-500">
-                    Date of Acceptance: __________________
-                  </div>
-                </div>
+              {/* Acceptance Table matching PDF 1 */}
+              <div className="pt-1 max-w-md">
+                <table className="w-full border-collapse border border-black text-xs">
+                  <tbody>
+                    <tr>
+                      <td className="border border-black bg-slate-200 font-bold px-3 py-2 w-32 uppercase text-slate-900">
+                        SIGNATURE
+                      </td>
+                      <td className="border border-black px-3 py-3 h-10 bg-white"></td>
+                    </tr>
+                    <tr>
+                      <td className="border border-black bg-slate-200 font-bold px-3 py-2 uppercase text-slate-900">
+                        NRIC
+                      </td>
+                      <td className="border border-black px-3 py-2 h-7 bg-white"></td>
+                    </tr>
+                    <tr>
+                      <td className="border border-black bg-slate-200 font-bold px-3 py-2 uppercase text-slate-900">
+                        DATE
+                      </td>
+                      <td className="border border-black px-3 py-2 h-7 bg-white"></td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -395,3 +483,4 @@ ${letter.hasAcceptanceSlip ? `ACCEPTANCE SLIP:\n${letter.acceptanceText}\n\nSign
     </div>
   );
 };
+

@@ -11,6 +11,65 @@ export type ActionType = 'Contract Renewal' | 'Probation Confirmation';
 export type UrgencyLevel = 'overdue' | 'urgent' | 'warning' | 'normal';
 
 export interface MRFRecord {
+  // Requisition Details (Section A)
+  position?: string;
+  noOfPeopleRequired?: number | string;
+  companyDivision?: string;
+  dateRequired?: string;
+  estimatedBudget?: string;
+  requisitionFor?: 'ADDITIONAL' | 'REPLACEMENT' | 'RENEWAL';
+  statusOfEmployee?: 'PERMANENT' | 'CONTRACT';
+
+  // Detail of Person to be Renewed (Section B)
+  name?: string;
+  staffNo?: string;
+  pmsRating?: string;
+  lengthOfService?: string;
+  overallComments?: string;
+
+  // Justification (Section C)
+  benefitsToCompany?: string;
+  impactIfNotApproved?: string;
+  distributionOfWorkload?: string;
+
+  // Job Description & Special Skills (Sections D & E)
+  jobDescription?: string;
+  qualificationsAndSkills?: string;
+
+  // Requisitioner (Section F)
+  requestedByName?: string;
+  requestedByDesignation?: string;
+  requestedByDate?: string;
+  recommendedByName?: string;
+  recommendedByDesignation?: string;
+  recommendedByDate?: string;
+
+  // HR Use (Section G)
+  isPositionBudgeted?: boolean;
+  totalHeadcount?: number | string;
+  hrRemarks?: string;
+  hrSignatureName?: string;
+  hrSignatureDate?: string;
+
+  // GM HR Approval (Section H)
+  gmHrPermanent?: boolean;
+  gmHrContract?: boolean;
+  gmHrKiv?: boolean;
+  gmHrKivUntil?: string;
+  gmHrNotApproved?: boolean;
+  gmHrContractPeriod?: string;
+  gmHrSignatureDate?: string;
+
+  // GMD / CEO Approval (Section I)
+  ceoPermanent?: boolean;
+  ceoContract?: boolean;
+  ceoKiv?: boolean;
+  ceoKivUntil?: string;
+  ceoNotApproved?: boolean;
+  ceoContractPeriod?: string;
+  ceoSignatureDate?: string;
+
+  // Core & Legacy fields
   recommendationType: 'Renew' | 'Confirm' | 'Extend Probation' | 'Non-Renew';
   proposedPeriod: string;
   proposedStartDate: string;

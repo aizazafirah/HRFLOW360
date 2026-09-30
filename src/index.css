@@ -34,6 +34,8 @@
     color: black !important;
     font-size: 11pt !important;
     line-height: 1.4 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Hide app shell, navigation, modals backdrop, and screen buttons */

@@ -4,6 +4,7 @@ import { calculateDaysToDue, formatDate } from '../utils/dateUtils';
 import {
   FileText,
   FileCheck2,
+  Download,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -21,6 +22,7 @@ interface EmployeeTableProps {
   onSort: (field: SortField) => void;
   onOpenMRF: (employee: Employee) => void;
   onOpenLetter: (employee: Employee) => void;
+  onDownloadLetter?: (employee: Employee) => void;
   onEditEmployee: (employee: Employee) => void;
   onDeleteEmployee: (id: string, name: string) => void;
   onStatusChange: (id: string, newStatus: WorkflowStatus) => void;
@@ -33,6 +35,7 @@ export const EmployeeTable: React.FC<EmployeeTableProps> = ({
   onSort,
   onOpenMRF,
   onOpenLetter,
+  onDownloadLetter,
   onEditEmployee,
   onDeleteEmployee,
   onStatusChange,
@@ -317,6 +320,17 @@ export const EmployeeTable: React.FC<EmployeeTableProps> = ({
                         <FileText className="w-3.5 h-3.5" />
                         <span>Generate Letter</span>
                       </button>
+
+                      {/* Quick Download Letter */}
+                      {onDownloadLetter && (
+                        <button
+                          onClick={() => onDownloadLetter(emp)}
+                          title="Quick Download Letter (.doc)"
+                          className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-indigo-200 rounded-md transition-colors shadow-2xs"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </button>
+                      )}
 
                       {/* Quick Edit */}
                       <button
