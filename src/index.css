@@ -22,23 +22,27 @@
   background: #94a3b8;
 }
 
-/* Print specific styles for corporate letters & MRF forms */
+/* Print specific styles for corporate letters & MRF forms - Exact A4 Paper standard */
 @media print {
   @page {
     size: A4 portrait;
-    margin: 12mm 12mm 12mm 12mm;
+    margin: 15mm 15mm 15mm 15mm;
   }
 
-  body {
-    background: white !important;
-    color: black !important;
-    font-size: 11pt !important;
-    line-height: 1.4 !important;
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Hide app shell, navigation, modals backdrop, and screen buttons */
+  /* Hide app shell, navigation, modals backdrop, control bars, and screen buttons */
   .no-print,
   nav,
   header,
@@ -52,7 +56,7 @@
     display: none !important;
   }
 
-  /* Reset modal wrapper so printable sheet fills page */
+  /* Reset modal containers so they don't clip or darken the printed page */
   .print-document-container {
     position: static !important;
     display: block !important;
@@ -73,14 +77,41 @@
     padding: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
-    background: white !important;
-    page-break-after: avoid;
-    break-after: avoid;
+    max-height: none !important;
+    background: #ffffff !important;
+    overflow: visible !important;
   }
 
-  /* Prevent page breaks inside signature blocks or tables */
+  /* The actual letter content printed cleanly */
+  #corporate-letter-content {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    font-size: 11pt !important;
+    line-height: 1.4 !important;
+    color: #000000 !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+  }
+
+  #corporate-letter-content * {
+    color: #000000 !important;
+  }
+
+  /* Retain acceptance table gray header and black border */
+  #corporate-letter-content td.bg-slate-200,
+  #corporate-letter-content [style*="background-color: rgb(226, 232, 240)"],
+  #corporate-letter-content [style*="background-color: #e2e8f0"] {
+    background-color: #e2e8f0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Prevent page breaks inside signature blocks or acceptance table */
   .print-avoid-break {
-    page-break-inside: avoid;
-    break-inside: avoid;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 }

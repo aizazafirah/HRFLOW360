@@ -27,6 +27,23 @@ interface CorporateLetterModalProps {
   onIssueLetter: (employeeId: string, letterData: LetterRecord) => void;
 }
 
+// Helper to safely convert any oklch color string to sRGB using browser canvas 2d context
+function safeConvertOklch(colorVal: string): string {
+  if (!colorVal || typeof colorVal !== 'string') return '#000000';
+  if (!colorVal.includes('oklch')) return colorVal;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '#0f172a';
+    ctx.fillStyle = colorVal;
+    return ctx.fillStyle || '#0f172a';
+  } catch {
+    return '#0f172a';
+  }
+}
+
 export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
   isOpen,
   onClose,
@@ -66,7 +83,7 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
   // Generate the live content based on current template and overrides
   const letter = generateLetterContent(employee, selectedTemplate, customOverrides);
 
-  // 1. Direct PDF Generation via jsPDF and html2canvas
+  // 1. Direct PDF Generation via jsPDF and html2canvas with oklch sanitization
   const handleGeneratePdf = async () => {
     if (!employee || !letterRef.current) return;
     setIsGeneratingPdf(true);
@@ -79,6 +96,48 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
+        onclone: (clonedDoc) => {
+          // 1. Sanitize all style tags in the cloned document replacing oklch with valid RGB
+          const styleTags = clonedDoc.querySelectorAll('style');
+          styleTags.forEach((tag) => {
+            if (tag.textContent && tag.textContent.includes('oklch')) {
+              tag.textContent = tag.textContent.replace(/oklch\([^)]+\)/g, (match) => {
+                return safeConvertOklch(match);
+              });
+            }
+          });
+
+          // 2. Inject an override style into cloned document head to guarantee RGB/Hex colors
+          const overrideStyle = clonedDoc.createElement('style');
+          overrideStyle.textContent = `
+            * {
+              border-color: #cbd5e1 !important;
+              outline-color: #cbd5e1 !important;
+            }
+            #corporate-letter-content {
+              background-color: #ffffff !important;
+              color: #0f172a !important;
+            }
+          `;
+          clonedDoc.head.appendChild(overrideStyle);
+
+          // 3. Clean any lingering computed oklch on cloned elements
+          const elements = clonedDoc.querySelectorAll('#corporate-letter-content, #corporate-letter-content *');
+          elements.forEach((el) => {
+            const htmlEl = el as HTMLElement;
+            try {
+              const comp = window.getComputedStyle(htmlEl);
+              ['color', 'backgroundColor', 'borderColor', 'outlineColor', 'fill', 'stroke'].forEach((prop) => {
+                const val = (comp as any)[prop];
+                if (typeof val === 'string' && val.includes('oklch')) {
+                  htmlEl.style.setProperty(prop, safeConvertOklch(val), 'important');
+                }
+              });
+            } catch {
+              // ignore
+            }
+          });
+        },
       });
 
       const imgData = canvas.toDataURL('image/png');
@@ -121,71 +180,10 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
     }
   };
 
-  // 2. Clean Print functionality via isolated iframe (bypasses modal backdrops and scrollbars)
+  // 2. Clean Print functionality: directly invokes native browser print
+  // The @media print stylesheet isolates #corporate-letter-content on exact A4 portrait paper
   const handlePrint = () => {
-    if (!letterRef.current) {
-      window.print();
-      return;
-    }
-
-    try {
-      const content = letterRef.current.innerHTML;
-      const printFrame = document.createElement('iframe');
-      printFrame.style.position = 'fixed';
-      printFrame.style.right = '0';
-      printFrame.style.bottom = '0';
-      printFrame.style.width = '0';
-      printFrame.style.height = '0';
-      printFrame.style.border = '0';
-      document.body.appendChild(printFrame);
-
-      const doc = printFrame.contentWindow?.document;
-      if (doc) {
-        doc.open();
-        doc.write(`
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <meta charset="utf-8">
-            <title>${letter.title} - ${letter.recipient.name}</title>
-            <style>
-              @page { size: A4 portrait; margin: 20mm; }
-              body { 
-                font-family: Arial, Helvetica, sans-serif;
-                font-size: 11pt; 
-                line-height: 1.4; 
-                color: #000; 
-                margin: 0; 
-                padding: 0; 
-              }
-              table { border-collapse: collapse; width: 100%; }
-              * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-              p { text-align: justify; margin: 0 0 10pt 0; }
-              .text-justify { text-align: justify; }
-            </style>
-          </head>
-          <body>
-            <div>${content}</div>
-          </body>
-          </html>
-        `);
-        doc.close();
-        setTimeout(() => {
-          printFrame.contentWindow?.focus();
-          printFrame.contentWindow?.print();
-          setTimeout(() => {
-            if (document.body.contains(printFrame)) {
-              document.body.removeChild(printFrame);
-            }
-          }, 1500);
-        }, 400);
-      } else {
-        window.print();
-      }
-    } catch (e) {
-      console.warn('Iframe print error, falling back to window.print():', e);
-      window.print();
-    }
+    window.print();
   };
 
   // 3. Download Microsoft Word (.doc) document
@@ -566,78 +564,79 @@ DATE:      _____________________`
         <div
           ref={letterRef}
           id="corporate-letter-content"
-          className="p-8 sm:p-14 overflow-y-auto space-y-4 text-xs sm:text-[13px] text-slate-900 flex-1 leading-relaxed bg-white font-sans max-w-3xl mx-auto w-full"
+          style={{ backgroundColor: '#ffffff', color: '#0f172a' }}
+          className="p-8 sm:p-14 overflow-y-auto space-y-4 text-xs sm:text-[13px] flex-1 leading-relaxed font-sans max-w-3xl mx-auto w-full"
         >
           {/* Top Line: Date and optional Private & Confidential (Only on Renewal) */}
-          <div className="flex justify-between items-start pt-2">
-            <div className="text-slate-900 font-normal">
+          <div className="flex justify-between items-start pt-2" style={{ color: '#0f172a' }}>
+            <div style={{ color: '#0f172a' }}>
               {letter.date}
             </div>
             {letter.confidentialNotice && (
-              <div className="text-slate-900 font-bold uppercase tracking-wide">
+              <div className="font-bold uppercase tracking-wide" style={{ color: '#0f172a' }}>
                 {letter.confidentialNotice}
               </div>
             )}
           </div>
 
           {/* Recipient Details */}
-          <div className="pt-4 space-y-0.5 text-slate-900">
-            <div className="font-bold tracking-tight">
+          <div className="pt-4 space-y-0.5" style={{ color: '#0f172a' }}>
+            <div className="font-bold tracking-tight" style={{ color: '#0f172a' }}>
               &lt;{letter.recipient.staffId}&gt; &lt;{letter.recipient.name}&gt;
             </div>
-            <div>{letter.recipient.throughLine}</div>
-            <div>&lt;{letter.recipient.department}&gt;</div>
+            <div style={{ color: '#0f172a' }}>{letter.recipient.throughLine}</div>
+            <div style={{ color: '#0f172a' }}>&lt;{letter.recipient.department}&gt;</div>
           </div>
 
           {/* Salutation */}
-          <div className="pt-3 text-slate-900">
+          <div className="pt-3" style={{ color: '#0f172a' }}>
             {letter.salutation}
           </div>
 
           {/* Title with full-width horizontal black line */}
           <div className="pt-3">
-            <h1 className="text-xs sm:text-[13px] font-bold uppercase tracking-tight text-slate-900">
+            <h1 className="text-xs sm:text-[13px] font-bold uppercase tracking-tight" style={{ color: '#0f172a' }}>
               {letter.title}
             </h1>
-            <div className="w-full h-[2px] bg-black mt-1.5 mb-3" />
+            <div className="w-full h-[2px] mt-1.5 mb-3" style={{ backgroundColor: '#000000' }} />
           </div>
 
           {/* Paragraphs */}
-          <div className="space-y-3.5 text-justify text-slate-900 leading-normal">
+          <div className="space-y-3.5 text-justify leading-normal" style={{ color: '#0f172a' }}>
             {letter.paragraphs.map((p, idx) => (
-              <p key={idx}>{p}</p>
+              <p key={idx} style={{ color: '#0f172a' }}>{p}</p>
             ))}
           </div>
 
           {/* Signatory Section */}
-          <div className="pt-5 space-y-1 print-avoid-break">
-            <div>Yours faithfully</div>
-            <div className="font-bold text-slate-900 uppercase">
+          <div className="pt-5 space-y-1 print-avoid-break" style={{ color: '#0f172a' }}>
+            <div style={{ color: '#0f172a' }}>Yours faithfully</div>
+            <div className="font-bold uppercase" style={{ color: '#0f172a' }}>
               &lt;{letter.signatory.company}&gt;
             </div>
 
             {/* Signature blank space */}
             <div className="h-14" />
 
-            <div className="font-bold text-slate-900 text-xs sm:text-[13px]">
+            <div className="font-bold text-xs sm:text-[13px]" style={{ color: '#0f172a' }}>
               {letter.signatory.name}
             </div>
-            <div className="text-slate-800 text-xs sm:text-[12px]">
+            <div className="text-xs sm:text-[12px]" style={{ color: '#1e293b' }}>
               {letter.signatory.title}
             </div>
           </div>
 
           {/* CC Notice & Initials (For Confirmation & Extension of Probation) */}
           {letter.ccNotice ? (
-            <div className="pt-4 text-xs sm:text-[12px] text-slate-900 print-avoid-break">
-              <div>{letter.ccNotice}</div>
-              <div className="text-slate-500 text-[10px] mt-0.5">
+            <div className="pt-4 text-xs sm:text-[12px] print-avoid-break" style={{ color: '#0f172a' }}>
+              <div style={{ color: '#0f172a' }}>{letter.ccNotice}</div>
+              <div className="text-[10px] mt-0.5" style={{ color: '#64748b' }}>
                 {letter.signatory.initials}
               </div>
             </div>
           ) : (
             letter.signatory.initials && (
-              <div className="text-slate-500 text-[10px] lowercase pt-1 print-avoid-break">
+              <div className="text-[10px] lowercase pt-1 print-avoid-break" style={{ color: '#64748b' }}>
                 {letter.signatory.initials}
               </div>
             )
@@ -645,32 +644,32 @@ DATE:      _____________________`
 
           {/* Candidate Acceptance Section with Table (ONLY for Renewal) */}
           {letter.hasAcceptanceSlip && (
-            <div className="pt-6 border-t border-slate-300 space-y-3 print-avoid-break">
-              <p className="text-slate-900 text-justify text-xs sm:text-[12px] leading-relaxed">
+            <div className="pt-6 space-y-3 print-avoid-break" style={{ borderTop: '1px solid #cbd5e1' }}>
+              <p className="text-justify text-xs sm:text-[12px] leading-relaxed" style={{ color: '#0f172a' }}>
                 {letter.acceptanceText}
               </p>
 
               {/* Acceptance Table matching PDF 3 */}
               <div className="pt-1 max-w-md">
-                <table className="w-full border-collapse border border-black text-xs">
+                <table className="w-full border-collapse text-xs" style={{ border: '1px solid #000000' }}>
                   <tbody>
                     <tr>
-                      <td className="border border-black bg-slate-200 font-bold px-3 py-2 w-32 uppercase text-slate-900">
+                      <td className="font-bold px-3 py-2 w-32 uppercase" style={{ border: '1px solid #000000', backgroundColor: '#e2e8f0', color: '#0f172a' }}>
                         SIGNATURE
                       </td>
-                      <td className="border border-black px-3 py-3 h-10 bg-white"></td>
+                      <td className="px-3 py-3 h-10" style={{ border: '1px solid #000000', backgroundColor: '#ffffff' }}></td>
                     </tr>
                     <tr>
-                      <td className="border border-black bg-slate-200 font-bold px-3 py-2 uppercase text-slate-900">
+                      <td className="font-bold px-3 py-2 uppercase" style={{ border: '1px solid #000000', backgroundColor: '#e2e8f0', color: '#0f172a' }}>
                         NRIC
                       </td>
-                      <td className="border border-black px-3 py-2 h-7 bg-white"></td>
+                      <td className="px-3 py-2 h-7" style={{ border: '1px solid #000000', backgroundColor: '#ffffff' }}></td>
                     </tr>
                     <tr>
-                      <td className="border border-black bg-slate-200 font-bold px-3 py-2 uppercase text-slate-900">
+                      <td className="font-bold px-3 py-2 uppercase" style={{ border: '1px solid #000000', backgroundColor: '#e2e8f0', color: '#0f172a' }}>
                         DATE
                       </td>
-                      <td className="border border-black px-3 py-2 h-7 bg-white"></td>
+                      <td className="px-3 py-2 h-7" style={{ border: '1px solid #000000', backgroundColor: '#ffffff' }}></td>
                     </tr>
                   </tbody>
                 </table>

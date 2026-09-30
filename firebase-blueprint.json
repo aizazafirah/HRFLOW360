@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "employee": {
+      "title": "Employee",
+      "description": "HR Employee record for contract renewal or probation confirmation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "employeeCode": { "type": "string", "maxLength": 50 },
+        "name": { "type": "string", "maxLength": 200 },
+        "nric": { "type": "string", "maxLength": 50 },
+        "businessUnit": { "type": "string", "maxLength": 100 },
+        "department": { "type": "string", "maxLength": 100 },
+        "positionTitle": { "type": "string", "maxLength": 150 },
+        "jobGrade": { "type": "string", "maxLength": 20 },
+        "actionType": { "type": "string", "enum": ["Contract Renewal", "Probation Confirmation"] },
+        "dateJoined": { "type": "string", "maxLength": 30 },
+        "contractExpiryDate": { "type": "string", "maxLength": 30 },
+        "currentSalary": { "type": "number" },
+        "superiorName": { "type": "string", "maxLength": 150 },
+        "superiorDesignation": { "type": "string", "maxLength": 150 },
+        "hodName": { "type": "string", "maxLength": 150 },
+        "status": { "type": "string", "enum": ["Pending Email", "Pending Reminder", "Pending Approval", "Submission of MRF", "Letter Preparation", "Completed"] },
+        "remarks": { "type": "string", "maxLength": 1000 }
+      },
+      "required": ["employeeCode", "name", "department", "actionType", "status"]
+    },
+    "activityLog": {
+      "title": "ActivityLog",
+      "description": "Audit trail log of HR operational actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 100 },
+        "timestamp": { "type": "string", "maxLength": 50 },
+        "action": { "type": "string", "maxLength": 100 },
+        "details": { "type": "string", "maxLength": 1000 },
+        "type": { "type": "string", "enum": ["email", "status", "mrf", "system"] }
+      },
+      "required": ["timestamp", "action", "details", "type"]
+    },
+    "userProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated HR user profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 200 },
+        "displayName": { "type": "string", "maxLength": 200 },
+        "role": { "type": "string", "maxLength": 50 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["uid", "email"]
+    }
+  },
+  "firestore": {
+    "/employees/{employeeId}": {
+      "schema": { "$ref": "#/entities/employee" },
+      "description": "Collection of employee contract and probation records"
+    },
+    "/activity_logs/{logId}": {
+      "schema": { "$ref": "#/entities/activityLog" },
+      "description": "Audit trail logs for compliance"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/userProfile" },
+      "description": "Registered HR users"
+    }
+  }
+}

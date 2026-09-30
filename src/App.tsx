@@ -29,6 +29,15 @@ import { EmployeeEditModal } from './components/EmployeeEditModal';
 import { ActivityLogModal } from './components/ActivityLogModal';
 import { DepartmentSummaryView } from './components/DepartmentSummaryView';
 import { ImportModal } from './components/ImportModal';
+import { AuthModal } from './components/AuthModal';
+import {
+  subscribeToEmployees,
+  saveEmployeeToFirestore,
+  bulkSyncEmployeesToFirestore,
+  deleteEmployeeFromFirestore,
+  subscribeToActivityLogs,
+  addActivityLogToFirestore,
+} from './firebase/firestoreService';
 import { generateLetterContent } from './utils/letterTemplates';
 import { Check, AlertCircle, Info, X } from 'lucide-react';
 
@@ -68,6 +77,42 @@ export default function App() {
 
   const [isActivityLogOpen, setIsActivityLogOpen] = useState<boolean>(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+
+  // Real-time Firestore sync with resilient local fallback
+  useEffect(() => {
+    let isSeeding = false;
+    const unsubEmployees = subscribeToEmployees(
+      (remoteEmployees) => {
+        if (remoteEmployees.length > 0) {
+          setEmployees(remoteEmployees);
+          saveEmployees(remoteEmployees);
+        } else if (!isSeeding) {
+          isSeeding = true;
+          // Fresh Firestore: seed initial Malaysian sample records
+          const initial = loadEmployees();
+          bulkSyncEmployeesToFirestore(initial).catch((err) => {
+            console.warn('Initial Firestore seed notice:', err);
+          });
+        }
+      },
+      (err) => console.warn('Using local employee cache:', err)
+    );
+
+    const unsubLogs = subscribeToActivityLogs(
+      (remoteLogs) => {
+        if (remoteLogs.length > 0) {
+          setActivityLogs(remoteLogs);
+        }
+      },
+      (err) => console.warn('Using local activity log cache:', err)
+    );
+
+    return () => {
+      unsubEmployees();
+      unsubLogs();
+    };
+  }, []);
 
   // Toast feedback state
   const [toastMessage, setToastMessage] = useState<{
@@ -81,6 +126,26 @@ export default function App() {
       setToastMessage(null);
     }, 3500);
   };
+
+  // Support direct MRF deep link from notification email (?action=mrf&employeeId=...)
+  useEffect(() => {
+    if (typeof window === 'undefined' || employees.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('action');
+    const empId = params.get('employeeId');
+    const dept = params.get('department');
+
+    if (action === 'mrf' && empId) {
+      const target = employees.find((e) => e.id === empId || e.employeeCode === empId);
+      if (target) {
+        setSelectedMRFEmployee(target);
+        setIsMRFModalOpen(true);
+      }
+    } else if (dept) {
+      setFilters((prev) => ({ ...prev, department: dept }));
+      setActiveTab('directory');
+    }
+  }, [employees]);
 
   // Distinct list of departments
   const departments = useMemo(() => {
@@ -181,25 +246,28 @@ export default function App() {
 
   // Status Change Handler
   const handleStatusChange = (id: string, newStatus: WorkflowStatus) => {
+    let changedEmp: Employee | undefined;
     const updated = employees.map((e) => {
       if (e.id === id) {
-        return { ...e, status: newStatus };
+        changedEmp = { ...e, status: newStatus };
+        return changedEmp;
       }
       return e;
     });
     updateAndSaveEmployees(updated);
 
-    const emp = employees.find((e) => e.id === id);
-    if (emp) {
+    if (changedEmp) {
+      saveEmployeeToFirestore(changedEmp).catch((err) => console.warn('Firestore update sync error:', err));
       const newLog = logActivity({
         action: 'Status Updated',
-        details: `Status of ${emp.name} (${emp.employeeCode}) changed to "${newStatus}"`,
-        employeeId: emp.id,
-        employeeName: emp.name,
+        details: `Status of ${changedEmp.name} (${changedEmp.employeeCode}) changed to "${newStatus}"`,
+        employeeId: changedEmp.id,
+        employeeName: changedEmp.name,
         type: 'status',
       });
       setActivityLogs((prev) => [newLog, ...prev]);
-      showToast(`Status updated to "${newStatus}" for ${emp.name}`, 'info');
+      addActivityLogToFirestore(newLog).catch((err) => console.warn('Firestore log sync error:', err));
+      showToast(`Status updated to "${newStatus}" for ${changedEmp.name}`, 'info');
     }
   };
 
@@ -212,18 +280,22 @@ export default function App() {
   // Mark Email Sent
   const handleMarkEmailSent = (employeeIds: string[], department: string) => {
     const nowStr = new Date().toISOString().split('T')[0];
+    const changedEmps: Employee[] = [];
     const updated = employees.map((emp) => {
       if (employeeIds.includes(emp.id)) {
-        return {
+        const u = {
           ...emp,
           status: 'Pending Approval' as WorkflowStatus,
           emailSentDate: nowStr,
         };
+        changedEmps.push(u);
+        return u;
       }
       return emp;
     });
 
     updateAndSaveEmployees(updated);
+    changedEmps.forEach((ce) => saveEmployeeToFirestore(ce).catch(console.warn));
 
     const newLog = logActivity({
       action: 'HOD Notification Sent',
@@ -231,6 +303,7 @@ export default function App() {
       type: 'email',
     });
     setActivityLogs((prev) => [newLog, ...prev]);
+    addActivityLogToFirestore(newLog).catch(console.warn);
 
     showToast(
       `Email dispatched! ${employeeIds.length} employee(s) in ${department} transitioned to "Pending Approval".`,
@@ -245,29 +318,31 @@ export default function App() {
   };
 
   const handleSaveMRF = (employeeId: string, mrfData: MRFRecord, submitStatus?: boolean) => {
+    let updatedEmp: Employee | undefined;
     const updated = employees.map((e) => {
       if (e.id === employeeId) {
-        return {
+        updatedEmp = {
           ...e,
           mrfData,
           status: submitStatus ? ('Submission of MRF' as WorkflowStatus) : e.status,
         };
+        return updatedEmp;
       }
       return e;
     });
 
     updateAndSaveEmployees(updated);
-
-    const targetEmp = employees.find((e) => e.id === employeeId);
-    if (targetEmp) {
+    if (updatedEmp) {
+      saveEmployeeToFirestore(updatedEmp).catch(console.warn);
       const newLog = logActivity({
         action: submitStatus ? 'MRF Form Submitted' : 'MRF Draft Saved',
-        details: `MRF record for ${targetEmp.name} (${targetEmp.employeeCode}): Decision "${mrfData.recommendationType}", Proposed: ${mrfData.proposedPeriod}`,
-        employeeId: targetEmp.id,
-        employeeName: targetEmp.name,
+        details: `MRF record for ${updatedEmp.name} (${updatedEmp.employeeCode}): Decision "${mrfData.recommendationType}", Proposed: ${mrfData.proposedPeriod}`,
+        employeeId: updatedEmp.id,
+        employeeName: updatedEmp.name,
         type: 'mrf',
       });
       setActivityLogs((prev) => [newLog, ...prev]);
+      addActivityLogToFirestore(newLog).catch(console.warn);
     }
 
     showToast(
@@ -285,29 +360,31 @@ export default function App() {
   };
 
   const handleIssueLetter = (employeeId: string, letterData: LetterRecord) => {
+    let updatedEmp: Employee | undefined;
     const updated = employees.map((e) => {
       if (e.id === employeeId) {
-        return {
+        updatedEmp = {
           ...e,
           letterData,
           status: 'Completed' as WorkflowStatus,
         };
+        return updatedEmp;
       }
       return e;
     });
 
     updateAndSaveEmployees(updated);
-
-    const targetEmp = employees.find((e) => e.id === employeeId);
-    if (targetEmp) {
+    if (updatedEmp) {
+      saveEmployeeToFirestore(updatedEmp).catch(console.warn);
       const newLog = logActivity({
         action: 'Corporate Letter Issued',
-        details: `Official letter (${letterData.templateType}) issued for ${targetEmp.name} (${targetEmp.employeeCode}). Ref: ${letterData.letterRef}`,
-        employeeId: targetEmp.id,
-        employeeName: targetEmp.name,
+        details: `Official letter (${letterData.templateType}) issued for ${updatedEmp.name} (${updatedEmp.employeeCode}). Ref: ${letterData.letterRef}`,
+        employeeId: updatedEmp.id,
+        employeeName: updatedEmp.name,
         type: 'letter',
       });
       setActivityLogs((prev) => [newLog, ...prev]);
+      addActivityLogToFirestore(newLog).catch(console.warn);
     }
 
     showToast(`Official letter issued! Status transitioned to "Completed".`, 'success');
@@ -471,6 +548,7 @@ export default function App() {
         type: 'system',
       });
       setActivityLogs((prev) => [newLog, ...prev]);
+      addActivityLogToFirestore(newLog).catch(console.warn);
       showToast(`Employee ${emp.name} added successfully.`, 'success');
     } else {
       updated = employees.map((e) => (e.id === emp.id ? emp : e));
@@ -482,9 +560,11 @@ export default function App() {
         type: 'system',
       });
       setActivityLogs((prev) => [newLog, ...prev]);
+      addActivityLogToFirestore(newLog).catch(console.warn);
       showToast(`Updated details for ${emp.name}.`, 'success');
     }
     updateAndSaveEmployees(updated);
+    saveEmployeeToFirestore(emp).catch(console.warn);
   };
 
   // Import Employees from Excel / CSV / PDF
@@ -502,13 +582,15 @@ export default function App() {
     }
 
     updateAndSaveEmployees(updated);
+    bulkSyncEmployeesToFirestore(updated).catch(console.warn);
 
     const newLog = logActivity({
       action: 'Data Imported',
-      details: `Bulk imported ${newEmployees.length} employees (${mode === 'append' ? 'Appended' : 'Replaced directory'}) from spreadsheet/file`,
+      details: `Bulk imported ${newEmployees.length} employees (${mode === 'append' ? 'Appended' : 'Replaced directory'}) to Firestore Cloud`,
       type: 'status',
     });
     setActivityLogs((prev) => [newLog, ...prev]);
+    addActivityLogToFirestore(newLog).catch(console.warn);
 
     showToast(`Successfully imported ${newEmployees.length} employee records!`, 'success');
   };
@@ -518,12 +600,14 @@ export default function App() {
     if (confirm(`Are you sure you want to remove ${name} from the management directory?`)) {
       const updated = employees.filter((e) => e.id !== id);
       updateAndSaveEmployees(updated);
+      deleteEmployeeFromFirestore(id).catch(console.warn);
       const newLog = logActivity({
         action: 'Employee Removed',
         details: `Deleted employee record for ${name} (ID: ${id})`,
         type: 'system',
       });
       setActivityLogs((prev) => [newLog, ...prev]);
+      addActivityLogToFirestore(newLog).catch(console.warn);
       showToast(`Record for ${name} removed.`, 'warning');
     }
   };
@@ -537,6 +621,7 @@ export default function App() {
     ) {
       const fresh = resetEmployees();
       setEmployees(fresh);
+      bulkSyncEmployeesToFirestore(fresh).catch(console.warn);
       setActivityLogs(loadActivityLogs());
       setFilters({
         search: '',
@@ -545,7 +630,7 @@ export default function App() {
         urgency: '',
         status: '',
       });
-      showToast('Database reset to 30 synthetic Malaysian corporate records.', 'info');
+      showToast('Database reset to 30 synthetic Malaysian corporate records synced with Firestore.', 'info');
     }
   };
 
@@ -643,6 +728,7 @@ export default function App() {
         onExportCsv={handleExportCSV}
         onOpenImport={() => setIsImportModalOpen(true)}
         onResetData={handleResetData}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
       />
@@ -716,6 +802,10 @@ export default function App() {
           initialDepartment={emailInitialDept}
           onMarkEmailSent={handleMarkEmailSent}
           departments={departments}
+          onOpenMRF={(emp) => {
+            setSelectedMRFEmployee(emp);
+            setIsMRFModalOpen(true);
+          }}
         />
       )}
 
@@ -771,6 +861,13 @@ export default function App() {
           onClose={() => setIsImportModalOpen(false)}
           onImportEmployees={handleImportEmployees}
           departments={departments}
+        />
+      )}
+
+      {isAuthModalOpen && (
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
         />
       )}
 

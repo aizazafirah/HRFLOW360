@@ -311,14 +311,14 @@ export const EmployeeTable: React.FC<EmployeeTableProps> = ({
                         <span>MRF Form</span>
                       </button>
 
-                      {/* Generate Corporate Letter */}
+                      {/* Generate / Print Corporate Letter */}
                       <button
                         onClick={() => onOpenLetter(emp)}
-                        title="Generate Official Corporate HR Letter (4 Templates)"
-                        className="px-2.5 py-1.5 text-[11px] font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md transition-colors flex items-center gap-1 shadow-2xs"
+                        title="Download PDF or Print A4 Official Corporate HR Letter"
+                        className="px-2.5 py-1.5 text-[11px] font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-md transition-colors flex items-center gap-1 shadow-2xs cursor-pointer"
                       >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>Generate Letter</span>
+                        <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Letter (PDF / Print)</span>
                       </button>
 
                       {/* Quick Download Letter */}
