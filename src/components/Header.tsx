@@ -1,10 +1,11 @@
 import React from 'react';
-import { Mail, Download, History, RotateCcw, UserCheck, ShieldCheck } from 'lucide-react';
+import { Mail, Download, Upload, History, RotateCcw, UserCheck, ShieldCheck } from 'lucide-react';
 
 interface HeaderProps {
   onOpenComposeEmail: () => void;
   onOpenActivityLogs: () => void;
   onExportCsv: () => void;
+  onOpenImport: () => void;
   onResetData: () => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -14,6 +15,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenComposeEmail,
   onOpenActivityLogs,
   onExportCsv,
+  onOpenImport,
   onResetData,
   activeTab,
   setActiveTab,
@@ -80,6 +82,15 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Download className="w-3.5 h-3.5 text-indigo-600" />
               <span>Download CSV</span>
+            </button>
+
+            <button
+              onClick={onOpenImport}
+              title="Import employees from Excel (.xlsx/.xls), Google Sheets (.csv), or PDF"
+              className="px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs whitespace-nowrap"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Import Data</span>
             </button>
 
             <button

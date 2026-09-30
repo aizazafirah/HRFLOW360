@@ -1,6 +1,6 @@
 import React from 'react';
 import { FilterState } from '../types/hr';
-import { Search, X, Filter, UserPlus } from 'lucide-react';
+import { Search, X, Filter, UserPlus, Upload } from 'lucide-react';
 
 interface FilterBarProps {
   filters: FilterState;
@@ -10,6 +10,7 @@ interface FilterBarProps {
   totalResults: number;
   totalRecords: number;
   onOpenAddEmployee: () => void;
+  onOpenImport?: () => void;
 }
 
 export const FilterBar: React.FC<FilterBarProps> = ({
@@ -20,6 +21,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   totalResults,
   totalRecords,
   onOpenAddEmployee,
+  onOpenImport,
 }) => {
   const hasActiveFilters =
     filters.search !== '' ||
@@ -134,6 +136,18 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             >
               <X className="w-3.5 h-3.5" />
               <span>Reset</span>
+            </button>
+          )}
+
+          {/* Import Data Button */}
+          {onOpenImport && (
+            <button
+              onClick={onOpenImport}
+              title="Import employees from Excel (.xlsx/.xls), Google Sheets, or PDF"
+              className="px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors flex items-center gap-1.5 whitespace-nowrap border border-indigo-200 shadow-2xs"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Import Data</span>
             </button>
           )}
 

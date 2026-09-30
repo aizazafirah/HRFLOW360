@@ -26,44 +26,42 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
   employee,
   onSaveMRF,
 }) => {
-  if (!isOpen || !employee) return null;
-
   // View mode: 'preview' (Official Template matching PDF 2) vs 'edit' (Interactive form inputs)
   const [viewMode, setViewMode] = useState<'preview' | 'edit'>('preview');
 
   // Initialize or hydrate MRF state from employee's current data or intelligent defaults
   const [formData, setFormData] = useState<MRFRecord>(() => {
-    const existing = employee.mrfData;
-    const defaultStartDate = employee.contractExpiryDate;
+    const existing = employee?.mrfData;
+    const defaultStartDate = employee?.contractExpiryDate || new Date().toISOString().split('T')[0];
     const defaultEndDate = addMonths(defaultStartDate, 12);
 
     return {
-      position: existing?.position || employee.positionTitle,
+      position: existing?.position || employee?.positionTitle || '',
       noOfPeopleRequired: existing?.noOfPeopleRequired || '1',
-      companyDivision: existing?.companyDivision || `${employee.businessUnit} / ${employee.department}`,
-      dateRequired: existing?.dateRequired || employee.contractExpiryDate,
-      estimatedBudget: existing?.estimatedBudget || `RM ${employee.currentSalary.toLocaleString()} / month (Budgeted in AOP)`,
+      companyDivision: existing?.companyDivision || `${employee?.businessUnit || 'Media Prima Berhad'} / ${employee?.department || 'Operations'}`,
+      dateRequired: existing?.dateRequired || employee?.contractExpiryDate || '',
+      estimatedBudget: existing?.estimatedBudget || `RM ${(employee?.currentSalary || 5000).toLocaleString()} / month (Budgeted in AOP)`,
       requisitionFor: existing?.requisitionFor || 'RENEWAL',
-      statusOfEmployee: existing?.statusOfEmployee || (employee.actionType === 'Probation Confirmation' ? 'PERMANENT' : 'CONTRACT'),
+      statusOfEmployee: existing?.statusOfEmployee || (employee?.actionType === 'Probation Confirmation' ? 'PERMANENT' : 'CONTRACT'),
 
-      name: existing?.name || employee.name,
-      staffNo: existing?.staffNo || employee.employeeCode,
+      name: existing?.name || employee?.name || '',
+      staffNo: existing?.staffNo || employee?.employeeCode || '',
       pmsRating: existing?.pmsRating || '4.2 / Exceeds Expectations',
       lengthOfService: existing?.lengthOfService || '2 Years 4 Months',
       overallComments: existing?.overallComments || `Consistently displays high professionalism, meets all project milestones and departmental deadlines. Highly recommended for renewal.`,
 
-      benefitsToCompany: existing?.benefitsToCompany || `Ensures continuous operation and service reliability for ${employee.department} deliverables without disruption.`,
+      benefitsToCompany: existing?.benefitsToCompany || `Ensures continuous operation and service reliability for ${employee?.department || 'department'} deliverables without disruption.`,
       impactIfNotApproved: existing?.impactIfNotApproved || `Critical operational workflows and key project delivery timelines will experience substantial delays.`,
       distributionOfWorkload: existing?.distributionOfWorkload || `Workload would need to be absorbed by existing team members, causing operational bottleneck and potential burnout.`,
 
-      jobDescription: existing?.jobDescription || `Responsible for day-to-day ${employee.positionTitle} operations, reporting, inter-departmental liaisons, and compliance with Media Prima corporate governance standards.`,
-      qualificationsAndSkills: existing?.qualificationsAndSkills || `Relevant tertiary qualification / professional degree, minimum 3 years industry experience, strong technical capability in ${employee.department} systems.`,
+      jobDescription: existing?.jobDescription || `Responsible for day-to-day ${employee?.positionTitle || 'operations'}, reporting, inter-departmental liaisons, and compliance with Media Prima corporate governance standards.`,
+      qualificationsAndSkills: existing?.qualificationsAndSkills || `Relevant tertiary qualification / professional degree, minimum 3 years industry experience, strong technical capability in ${employee?.department || 'department'} systems.`,
 
-      requestedByName: existing?.requestedByName || employee.superiorName,
-      requestedByDesignation: existing?.requestedByDesignation || employee.superiorDesignation,
+      requestedByName: existing?.requestedByName || employee?.superiorName || '',
+      requestedByDesignation: existing?.requestedByDesignation || employee?.superiorDesignation || '',
       requestedByDate: existing?.requestedByDate || '2026-09-20',
-      recommendedByName: existing?.recommendedByName || employee.hodName,
-      recommendedByDesignation: existing?.recommendedByDesignation || `Head of ${employee.department}`,
+      recommendedByName: existing?.recommendedByName || employee?.hodName || '',
+      recommendedByDesignation: existing?.recommendedByDesignation || `Head of ${employee?.department || 'Department'}`,
       recommendedByDate: existing?.recommendedByDate || '2026-09-22',
 
       isPositionBudgeted: existing?.isPositionBudgeted ?? true,
@@ -88,11 +86,11 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
       ceoContractPeriod: existing?.ceoContractPeriod || '12 MONTHS (1 YEAR)',
       ceoSignatureDate: existing?.ceoSignatureDate || '2026-09-26',
 
-      recommendationType: existing?.recommendationType || (employee.actionType === 'Probation Confirmation' ? 'Confirm' : 'Renew'),
+      recommendationType: existing?.recommendationType || (employee?.actionType === 'Probation Confirmation' ? 'Confirm' : 'Renew'),
       proposedPeriod: existing?.proposedPeriod || '12 Months (1 Year Extension)',
       proposedStartDate: existing?.proposedStartDate || defaultStartDate,
       proposedEndDate: existing?.proposedEndDate || defaultEndDate,
-      proposedSalary: existing?.proposedSalary || formatCurrency(employee.currentSalary * 1.05),
+      proposedSalary: existing?.proposedSalary || formatCurrency((employee?.currentSalary || 5000) * 1.05),
       justification: existing?.justification || `Employee has demonstrated strong performance, meeting all key quarterly deliverables.`,
       superiorRemarks: existing?.superiorRemarks || `Consistently exhibits professionalism, operational agility, and high teamwork standards. Strongly recommended for approval.`,
       headcountBudget: existing?.headcountBudget || 'Budgeted in AOP',
@@ -108,7 +106,7 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
 
   // Update form if employee changes
   useEffect(() => {
-    if (employee.mrfData) {
+    if (employee?.mrfData) {
       setFormData(employee.mrfData);
     }
   }, [employee]);
@@ -118,6 +116,7 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
   };
 
   const handleDownloadWord = () => {
+    if (!employee) return;
     try {
       const docHtml = `<!DOCTYPE html>
 <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -350,6 +349,7 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
   };
 
   const handleSave = (submit: boolean = false) => {
+    if (!employee) return;
     const updatedMRF: MRFRecord = {
       ...formData,
       status: submit ? 'Submitted' : formData.status,
@@ -362,6 +362,8 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
       if (submit) onClose();
     }, 1500);
   };
+
+  if (!isOpen || !employee) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print-document-container">

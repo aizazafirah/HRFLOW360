@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { Employee, LetterTemplateType, LetterRecord } from '../types/hr';
 import {
   LETTER_TEMPLATES,
@@ -14,6 +16,8 @@ import {
   FileText,
   SlidersHorizontal,
   ChevronDown,
+  FileDown,
+  Loader2,
 } from 'lucide-react';
 
 interface CorporateLetterModalProps {
@@ -29,12 +33,10 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
   employee,
   onIssueLetter,
 }) => {
-  if (!isOpen || !employee) return null;
-
   // Initial template selection
   const [selectedTemplate, setSelectedTemplate] = useState<LetterTemplateType>(() => {
-    if (employee.letterData?.templateType) return employee.letterData.templateType;
-    if (employee.actionType === 'Probation Confirmation') {
+    if (employee?.letterData?.templateType) return employee.letterData.templateType;
+    if (employee?.actionType === 'Probation Confirmation') {
       return employee.mrfData?.recommendationType === 'Extend Probation'
         ? 'extension_probation'
         : 'confirmation_work';
@@ -43,25 +45,152 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
   });
 
   const [customOverrides, setCustomOverrides] = useState<Partial<LetterRecord>>({
-    letterRef: employee.letterData?.letterRef || '',
-    effectiveDate: employee.letterData?.effectiveDate || employee.contractExpiryDate || '',
-    reviewDate: employee.letterData?.reviewDate || '',
-    customNotes: employee.letterData?.customNotes || '',
+    letterRef: employee?.letterData?.letterRef || '',
+    effectiveDate: employee?.letterData?.effectiveDate || employee?.contractExpiryDate || '',
+    reviewDate: employee?.letterData?.reviewDate || '',
+    customNotes: employee?.letterData?.customNotes || '',
   });
 
   const [showCustomizer, setShowCustomizer] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [issuedSuccess, setIssuedSuccess] = useState<boolean>(false);
   const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
+  const [pdfSuccess, setPdfSuccess] = useState<boolean>(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+
+  const letterRef = useRef<HTMLDivElement>(null);
+
+  // Guard after all hooks to comply with React 19 static flags
+  if (!isOpen || !employee) return null;
 
   // Generate the live content based on current template and overrides
   const letter = generateLetterContent(employee, selectedTemplate, customOverrides);
 
-  const handlePrint = () => {
-    window.print();
+  // 1. Direct PDF Generation via jsPDF and html2canvas
+  const handleGeneratePdf = async () => {
+    if (!employee || !letterRef.current) return;
+    setIsGeneratingPdf(true);
+
+    try {
+      const element = letterRef.current;
+
+      const canvas = await html2canvas(element, {
+        scale: 2.2, // 300dpi-equivalent resolution for crystal-sharp typography
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pdfWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // First page
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+      heightLeft -= pdfHeight;
+
+      // Subsequent pages if content overflows single A4
+      while (heightLeft > 5) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+        heightLeft -= pdfHeight;
+      }
+
+      const filename = `${employee.employeeCode}_${selectedTemplate}.pdf`;
+      pdf.save(filename);
+
+      setPdfSuccess(true);
+      setTimeout(() => setPdfSuccess(false), 2500);
+    } catch (err) {
+      console.error('PDF generation error, falling back to print dialog:', err);
+      handlePrint();
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
+  // 2. Clean Print functionality via isolated iframe (bypasses modal backdrops and scrollbars)
+  const handlePrint = () => {
+    if (!letterRef.current) {
+      window.print();
+      return;
+    }
+
+    try {
+      const content = letterRef.current.innerHTML;
+      const printFrame = document.createElement('iframe');
+      printFrame.style.position = 'fixed';
+      printFrame.style.right = '0';
+      printFrame.style.bottom = '0';
+      printFrame.style.width = '0';
+      printFrame.style.height = '0';
+      printFrame.style.border = '0';
+      document.body.appendChild(printFrame);
+
+      const doc = printFrame.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>${letter.title} - ${letter.recipient.name}</title>
+            <style>
+              @page { size: A4 portrait; margin: 20mm; }
+              body { 
+                font-family: Arial, Helvetica, sans-serif;
+                font-size: 11pt; 
+                line-height: 1.4; 
+                color: #000; 
+                margin: 0; 
+                padding: 0; 
+              }
+              table { border-collapse: collapse; width: 100%; }
+              * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              p { text-align: justify; margin: 0 0 10pt 0; }
+              .text-justify { text-align: justify; }
+            </style>
+          </head>
+          <body>
+            <div>${content}</div>
+          </body>
+          </html>
+        `);
+        doc.close();
+        setTimeout(() => {
+          printFrame.contentWindow?.focus();
+          printFrame.contentWindow?.print();
+          setTimeout(() => {
+            if (document.body.contains(printFrame)) {
+              document.body.removeChild(printFrame);
+            }
+          }, 1500);
+        }, 400);
+      } else {
+        window.print();
+      }
+    } catch (e) {
+      console.warn('Iframe print error, falling back to window.print():', e);
+      window.print();
+    }
+  };
+
+  // 3. Download Microsoft Word (.doc) document
   const handleDownloadWord = () => {
+    if (!employee) return;
     try {
       const docHtml = `<!DOCTYPE html>
 <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -78,22 +207,22 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
   </xml>
   <![endif]-->
   <style>
-    @page { size: A4; margin: 25mm 25mm 25mm 25mm; }
+    @page { size: A4 portrait; margin: 25mm 25mm 25mm 25mm; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.35; color: #000; margin: 0; }
     .top-header { width: 100%; margin-bottom: 24pt; }
     .top-header table { width: 100%; border: none; border-collapse: collapse; }
     .top-header td { border: none; padding: 0; font-size: 11pt; }
-    .recipient { margin-bottom: 18pt; line-height: 1.3; font-size: 11pt; }
-    .recipient-name { font-weight: bold; text-transform: uppercase; }
+    .recipient { margin-bottom: 18pt; line-height: 1.35; font-size: 11pt; }
     .salutation { margin-bottom: 16pt; font-size: 11pt; }
     .title { font-weight: bold; font-size: 11pt; text-transform: uppercase; margin-bottom: 4pt; }
     .divider { border-top: 2px solid #000; margin: 4pt 0 16pt 0; height: 0; }
     p { margin: 0 0 12pt 0; text-align: justify; line-height: 1.35; }
-    .signatory { margin-top: 20pt; line-height: 1.3; font-size: 11pt; }
+    .signatory { margin-top: 22pt; line-height: 1.3; font-size: 11pt; }
     .signature-space { height: 45pt; }
     .signatory-name { font-weight: bold; }
-    .initials { color: #64748b; font-size: 9pt; }
-    .acceptance-section { margin-top: 26pt; page-break-inside: avoid; }
+    .cc-section { margin-top: 18pt; font-size: 10.5pt; line-height: 1.3; }
+    .initials { color: #475569; font-size: 9pt; margin-top: 2pt; }
+    .acceptance-section { margin-top: 24pt; page-break-inside: avoid; border-top: 1px solid #cbd5e1; padding-top: 14pt; }
     .acceptance-table { border-collapse: collapse; width: 65%; margin-top: 12pt; }
     .acceptance-table td { border: 1px solid #000; padding: 6pt 10pt; font-size: 10pt; }
     .acceptance-table .label-cell { background-color: #e2e8f0; font-weight: bold; width: 120pt; }
@@ -104,15 +233,15 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
     <table style="width: 100%;">
       <tr>
         <td style="text-align: left;">${letter.date}</td>
-        <td style="text-align: right; font-weight: bold;">${letter.confidentialNotice}</td>
+        <td style="text-align: right; font-weight: bold;">${letter.confidentialNotice || ''}</td>
       </tr>
     </table>
   </div>
 
   <div class="recipient">
-    <div class="recipient-name">${letter.recipient.staffId} ${letter.recipient.name.toUpperCase()}</div>
-    <div>Through the ${letter.hodName}</div>
-    <div>&lt;${letter.recipient.department.toUpperCase()}&gt;</div>
+    <div>&lt;${letter.recipient.staffId}&gt; &lt;${letter.recipient.name}&gt;</div>
+    <div>${letter.recipient.throughLine}</div>
+    <div>&lt;${letter.recipient.department}&gt;</div>
   </div>
 
   <div class="salutation">
@@ -122,7 +251,7 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
   <div class="title">${letter.title}</div>
   <div class="divider"></div>
 
-  ${letter.paragraphs.map(p => `<p>${p}</p>`).join('\n  ')}
+  ${letter.paragraphs.map((p) => `<p>${p}</p>`).join('\n  ')}
 
   <div class="signatory">
     <div>Yours faithfully</div>
@@ -130,10 +259,26 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
     <div class="signature-space"></div>
     <div class="signatory-name">${letter.signatory.name}</div>
     <div>${letter.signatory.title}</div>
-    <div class="initials">${letter.signatory.initials || 'syl/aiz'}</div>
   </div>
 
-  ${letter.hasAcceptanceSlip ? `
+  ${
+    letter.ccNotice
+      ? `
+  <div class="cc-section">
+    <div>${letter.ccNotice}</div>
+    <div class="initials">${letter.signatory.initials || ''}</div>
+  </div>
+  `
+      : letter.signatory.initials
+      ? `
+  <div class="initials" style="margin-top: 8pt;">${letter.signatory.initials}</div>
+  `
+      : ''
+  }
+
+  ${
+    letter.hasAcceptanceSlip
+      ? `
   <div class="acceptance-section">
     <p style="font-size: 10.5pt; text-align: justify;">${letter.acceptanceText}</p>
     <table class="acceptance-table">
@@ -151,12 +296,14 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
       </tr>
     </table>
   </div>
-  ` : ''}
+  `
+      : ''
+  }
 </body>
 </html>`;
 
       const blob = new Blob(['\ufeff', docHtml], { type: 'application/msword;charset=utf-8' });
-      const filename = `${employee.employeeCode}_${selectedTemplate === 'extension_contract' ? 'Renewal_Letter' : selectedTemplate}.doc`;
+      const filename = `${employee.employeeCode}_${selectedTemplate}.doc`;
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -177,11 +324,11 @@ export const CorporateLetterModal: React.FC<CorporateLetterModalProps> = ({
 
   const handleCopyText = async () => {
     const text = `
-${letter.date}                                     ${letter.confidentialNotice}
+${letter.date}${letter.confidentialNotice ? `                                     ${letter.confidentialNotice}` : ''}
 
-${letter.recipient.staffId} ${letter.recipient.name.toUpperCase()}
-Through the ${letter.hodName}
-<${letter.recipient.department.toUpperCase()}>
+<${letter.recipient.staffId}> <${letter.recipient.name}>
+${letter.recipient.throughLine}
+<${letter.recipient.department}>
 
 ${letter.salutation}
 
@@ -197,10 +344,19 @@ Yours faithfully
 
 ${letter.signatory.name}
 ${letter.signatory.title}
-${letter.signatory.initials || 'syl/aiz'}
 
+${letter.ccNotice ? `${letter.ccNotice}\n${letter.signatory.initials || ''}` : letter.signatory.initials || ''}
+${
+  letter.hasAcceptanceSlip
+    ? `
 --------------------------------------------------------------------------------
-${letter.hasAcceptanceSlip ? `${letter.acceptanceText}\n\nSIGNATURE: _____________________\nNRIC:      _____________________\nDATE:      _____________________` : ''}
+${letter.acceptanceText}
+
+SIGNATURE: _____________________
+NRIC:      _____________________
+DATE:      _____________________`
+    : ''
+}
     `.trim();
 
     try {
@@ -213,6 +369,7 @@ ${letter.hasAcceptanceSlip ? `${letter.acceptanceText}\n\nSIGNATURE: ___________
   };
 
   const handleMarkIssued = () => {
+    if (!employee) return;
     const finalLetterData: LetterRecord = {
       templateType: selectedTemplate,
       letterRef: letter.referenceNumber,
@@ -259,24 +416,39 @@ ${letter.hasAcceptanceSlip ? `${letter.acceptanceText}\n\nSIGNATURE: ___________
               <span>{showCustomizer ? 'Hide Variables' : 'Edit Variables'}</span>
             </button>
 
-            {/* DOWNLOAD BUTTON - Fully Functional (.doc file download) */}
+            {/* 1. SAVE AS PDF (DIRECT DOWNLOAD) */}
+            <button
+              onClick={handleGeneratePdf}
+              disabled={isGeneratingPdf}
+              title="Generate and download high-resolution PDF directly"
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+            >
+              {isGeneratingPdf ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <FileDown className="w-3.5 h-3.5" />
+              )}
+              <span>{isGeneratingPdf ? 'Generating PDF...' : 'Save as PDF'}</span>
+            </button>
+
+            {/* 2. PRINT / PRINT DIALOGUE */}
+            <button
+              onClick={handlePrint}
+              title="Print document or select 'Save as PDF' from browser print window"
+              className="px-3 py-1.5 text-xs font-semibold text-slate-800 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-600" />
+              <span>Print A4</span>
+            </button>
+
+            {/* 3. DOWNLOAD WORD (.DOC) */}
             <button
               onClick={handleDownloadWord}
-              title="Download letter as Microsoft Word (.doc) document"
+              title="Download editable Microsoft Word (.doc) document (compatible with Word and Google Docs)"
               className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Download Word (.doc)</span>
-            </button>
-
-            {/* PRINT / SAVE PDF BUTTON */}
-            <button
-              onClick={handlePrint}
-              title="Print document or Save as PDF"
-              className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
-            >
-              <Printer className="w-3.5 h-3.5 text-slate-500" />
-              <span>Print A4 / PDF</span>
             </button>
 
             <button
@@ -307,7 +479,7 @@ ${letter.hasAcceptanceSlip ? `${letter.acceptanceText}\n\nSIGNATURE: ___________
         {/* Template Selector Bar (Hidden on print) */}
         <div className="no-print px-4 sm:px-6 py-2.5 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-700">Template Type:</span>
+            <span className="font-semibold text-slate-700">Select Template:</span>
             <div className="relative">
               <select
                 value={selectedTemplate}
@@ -368,6 +540,14 @@ ${letter.hasAcceptanceSlip ? `${letter.acceptanceText}\n\nSIGNATURE: ___________
           </div>
         )}
 
+        {/* Feedback banners */}
+        {pdfSuccess && (
+          <div className="no-print bg-rose-50 border-b border-rose-200 px-6 py-2 text-xs font-medium text-rose-800 flex items-center gap-2">
+            <Check className="w-4 h-4 text-rose-600" />
+            <span>PDF letter generated and downloaded successfully!</span>
+          </div>
+        )}
+
         {downloadSuccess && (
           <div className="no-print bg-indigo-50 border-b border-indigo-200 px-6 py-2 text-xs font-medium text-indigo-800 flex items-center gap-2">
             <Check className="w-4 h-4 text-indigo-600" />
@@ -382,25 +562,31 @@ ${letter.hasAcceptanceSlip ? `${letter.acceptanceText}\n\nSIGNATURE: ___________
           </div>
         )}
 
-        {/* Realistic A4 Paper Letter Layout - Exactly matches PDF 1 */}
-        <div className="p-8 sm:p-14 overflow-y-auto space-y-4 text-xs sm:text-[13px] text-slate-900 flex-1 leading-relaxed bg-white font-sans max-w-3xl mx-auto w-full">
-          {/* Top Line: Date and Private & Confidential */}
+        {/* Realistic A4 Paper Letter Layout - Exactly matches PDF Templates 1, 2, and 3 */}
+        <div
+          ref={letterRef}
+          id="corporate-letter-content"
+          className="p-8 sm:p-14 overflow-y-auto space-y-4 text-xs sm:text-[13px] text-slate-900 flex-1 leading-relaxed bg-white font-sans max-w-3xl mx-auto w-full"
+        >
+          {/* Top Line: Date and optional Private & Confidential (Only on Renewal) */}
           <div className="flex justify-between items-start pt-2">
             <div className="text-slate-900 font-normal">
               {letter.date}
             </div>
-            <div className="text-slate-900 font-bold uppercase tracking-wide">
-              {letter.confidentialNotice}
-            </div>
+            {letter.confidentialNotice && (
+              <div className="text-slate-900 font-bold uppercase tracking-wide">
+                {letter.confidentialNotice}
+              </div>
+            )}
           </div>
 
           {/* Recipient Details */}
           <div className="pt-4 space-y-0.5 text-slate-900">
-            <div className="font-bold uppercase tracking-tight">
-              &lt;{letter.recipient.staffId}&gt; &lt;{letter.recipient.name.toUpperCase()}&gt;
+            <div className="font-bold tracking-tight">
+              &lt;{letter.recipient.staffId}&gt; &lt;{letter.recipient.name}&gt;
             </div>
-            <div>Through the &lt;{letter.hodName}&gt;</div>
-            <div>&lt;{letter.recipient.department.toUpperCase()}&gt;</div>
+            <div>{letter.recipient.throughLine}</div>
+            <div>&lt;{letter.recipient.department}&gt;</div>
           </div>
 
           {/* Salutation */}
@@ -439,19 +625,32 @@ ${letter.hasAcceptanceSlip ? `${letter.acceptanceText}\n\nSIGNATURE: ___________
             <div className="text-slate-800 text-xs sm:text-[12px]">
               {letter.signatory.title}
             </div>
-            <div className="text-slate-500 text-[10px] lowercase">
-              {letter.signatory.initials || 'syl/aiz'}
-            </div>
           </div>
 
-          {/* Candidate Acceptance Section with Table */}
+          {/* CC Notice & Initials (For Confirmation & Extension of Probation) */}
+          {letter.ccNotice ? (
+            <div className="pt-4 text-xs sm:text-[12px] text-slate-900 print-avoid-break">
+              <div>{letter.ccNotice}</div>
+              <div className="text-slate-500 text-[10px] mt-0.5">
+                {letter.signatory.initials}
+              </div>
+            </div>
+          ) : (
+            letter.signatory.initials && (
+              <div className="text-slate-500 text-[10px] lowercase pt-1 print-avoid-break">
+                {letter.signatory.initials}
+              </div>
+            )
+          )}
+
+          {/* Candidate Acceptance Section with Table (ONLY for Renewal) */}
           {letter.hasAcceptanceSlip && (
             <div className="pt-6 border-t border-slate-300 space-y-3 print-avoid-break">
               <p className="text-slate-900 text-justify text-xs sm:text-[12px] leading-relaxed">
                 {letter.acceptanceText}
               </p>
 
-              {/* Acceptance Table matching PDF 1 */}
+              {/* Acceptance Table matching PDF 3 */}
               <div className="pt-1 max-w-md">
                 <table className="w-full border-collapse border border-black text-xs">
                   <tbody>
@@ -483,4 +682,3 @@ ${letter.hasAcceptanceSlip ? `${letter.acceptanceText}\n\nSIGNATURE: ___________
     </div>
   );
 };
-

@@ -28,6 +28,7 @@ import { CorporateLetterModal } from './components/CorporateLetterModal';
 import { EmployeeEditModal } from './components/EmployeeEditModal';
 import { ActivityLogModal } from './components/ActivityLogModal';
 import { DepartmentSummaryView } from './components/DepartmentSummaryView';
+import { ImportModal } from './components/ImportModal';
 import { generateLetterContent } from './utils/letterTemplates';
 import { Check, AlertCircle, Info, X } from 'lucide-react';
 
@@ -66,6 +67,7 @@ export default function App() {
   const [selectedEditEmployee, setSelectedEditEmployee] = useState<Employee | null>(null);
 
   const [isActivityLogOpen, setIsActivityLogOpen] = useState<boolean>(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
 
   // Toast feedback state
   const [toastMessage, setToastMessage] = useState<{
@@ -331,22 +333,22 @@ export default function App() {
   </xml>
   <![endif]-->
   <style>
-    @page { size: A4; margin: 25mm 25mm 25mm 25mm; }
+    @page { size: A4 portrait; margin: 25mm 25mm 25mm 25mm; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.35; color: #000; margin: 0; }
     .top-header { width: 100%; margin-bottom: 24pt; }
     .top-header table { width: 100%; border: none; border-collapse: collapse; }
     .top-header td { border: none; padding: 0; font-size: 11pt; }
-    .recipient { margin-bottom: 18pt; line-height: 1.3; font-size: 11pt; }
-    .recipient-name { font-weight: bold; text-transform: uppercase; }
+    .recipient { margin-bottom: 18pt; line-height: 1.35; font-size: 11pt; }
     .salutation { margin-bottom: 16pt; font-size: 11pt; }
     .title { font-weight: bold; font-size: 11pt; text-transform: uppercase; margin-bottom: 4pt; }
     .divider { border-top: 2px solid #000; margin: 4pt 0 16pt 0; height: 0; }
     p { margin: 0 0 12pt 0; text-align: justify; line-height: 1.35; }
-    .signatory { margin-top: 20pt; line-height: 1.3; font-size: 11pt; }
+    .signatory { margin-top: 22pt; line-height: 1.3; font-size: 11pt; }
     .signature-space { height: 45pt; }
     .signatory-name { font-weight: bold; }
-    .initials { color: #64748b; font-size: 9pt; }
-    .acceptance-section { margin-top: 26pt; page-break-inside: avoid; }
+    .cc-section { margin-top: 18pt; font-size: 10.5pt; line-height: 1.3; }
+    .initials { color: #475569; font-size: 9pt; margin-top: 2pt; }
+    .acceptance-section { margin-top: 24pt; page-break-inside: avoid; border-top: 1px solid #cbd5e1; padding-top: 14pt; }
     .acceptance-table { border-collapse: collapse; width: 65%; margin-top: 12pt; }
     .acceptance-table td { border: 1px solid #000; padding: 6pt 10pt; font-size: 10pt; }
     .acceptance-table .label-cell { background-color: #e2e8f0; font-weight: bold; width: 120pt; }
@@ -357,15 +359,15 @@ export default function App() {
     <table style="width: 100%;">
       <tr>
         <td style="text-align: left;">${letter.date}</td>
-        <td style="text-align: right; font-weight: bold;">${letter.confidentialNotice}</td>
+        <td style="text-align: right; font-weight: bold;">${letter.confidentialNotice || ''}</td>
       </tr>
     </table>
   </div>
 
   <div class="recipient">
-    <div class="recipient-name">${letter.recipient.staffId} ${letter.recipient.name.toUpperCase()}</div>
-    <div>Through the ${letter.hodName}</div>
-    <div>&lt;${letter.recipient.department.toUpperCase()}&gt;</div>
+    <div>&lt;${letter.recipient.staffId}&gt; &lt;${letter.recipient.name}&gt;</div>
+    <div>${letter.recipient.throughLine}</div>
+    <div>&lt;${letter.recipient.department}&gt;</div>
   </div>
 
   <div class="salutation">
@@ -383,10 +385,26 @@ export default function App() {
     <div class="signature-space"></div>
     <div class="signatory-name">${letter.signatory.name}</div>
     <div>${letter.signatory.title}</div>
-    <div class="initials">${letter.signatory.initials || 'syl/aiz'}</div>
   </div>
 
-  ${letter.hasAcceptanceSlip ? `
+  ${
+    letter.ccNotice
+      ? `
+  <div class="cc-section">
+    <div>${letter.ccNotice}</div>
+    <div class="initials">${letter.signatory.initials || ''}</div>
+  </div>
+  `
+      : letter.signatory.initials
+      ? `
+  <div class="initials" style="margin-top: 8pt;">${letter.signatory.initials}</div>
+  `
+      : ''
+  }
+
+  ${
+    letter.hasAcceptanceSlip
+      ? `
   <div class="acceptance-section">
     <p style="font-size: 10.5pt; text-align: justify;">${letter.acceptanceText}</p>
     <table class="acceptance-table">
@@ -404,12 +422,14 @@ export default function App() {
       </tr>
     </table>
   </div>
-  ` : ''}
+  `
+      : ''
+  }
 </body>
 </html>`;
 
       const blob = new Blob(['\ufeff', docHtml], { type: 'application/msword;charset=utf-8' });
-      const filename = `${emp.employeeCode}_Renewal_Letter.doc`;
+      const filename = `${emp.employeeCode}_${template}.doc`;
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -465,6 +485,32 @@ export default function App() {
       showToast(`Updated details for ${emp.name}.`, 'success');
     }
     updateAndSaveEmployees(updated);
+  };
+
+  // Import Employees from Excel / CSV / PDF
+  const handleImportEmployees = (newEmployees: Employee[], mode: 'append' | 'replace') => {
+    let updated: Employee[];
+    if (mode === 'replace') {
+      updated = newEmployees;
+    } else {
+      // Append mode: merge new employees with existing, updating matching employee codes
+      const existingMap = new Map(employees.map((e) => [e.employeeCode, e]));
+      newEmployees.forEach((e) => {
+        existingMap.set(e.employeeCode, e);
+      });
+      updated = Array.from(existingMap.values());
+    }
+
+    updateAndSaveEmployees(updated);
+
+    const newLog = logActivity({
+      action: 'Data Imported',
+      details: `Bulk imported ${newEmployees.length} employees (${mode === 'append' ? 'Appended' : 'Replaced directory'}) from spreadsheet/file`,
+      type: 'status',
+    });
+    setActivityLogs((prev) => [newLog, ...prev]);
+
+    showToast(`Successfully imported ${newEmployees.length} employee records!`, 'success');
   };
 
   // Delete Employee
@@ -595,6 +641,7 @@ export default function App() {
         onOpenComposeEmail={() => handleOpenComposeEmail()}
         onOpenActivityLogs={() => setIsActivityLogOpen(true)}
         onExportCsv={handleExportCSV}
+        onOpenImport={() => setIsImportModalOpen(true)}
         onResetData={handleResetData}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -630,6 +677,7 @@ export default function App() {
               totalResults={sortedEmployees.length}
               totalRecords={employees.length}
               onOpenAddEmployee={handleOpenAddEmployee}
+              onOpenImport={() => setIsImportModalOpen(true)}
             />
 
             {/* High-density Employee Directory Table */}
@@ -660,52 +708,71 @@ export default function App() {
       </main>
 
       {/* Modals */}
-      <HODEmailModal
-        isOpen={isEmailModalOpen}
-        onClose={() => setIsEmailModalOpen(false)}
-        employees={employees}
-        initialDepartment={emailInitialDept}
-        onMarkEmailSent={handleMarkEmailSent}
-        departments={departments}
-      />
+      {isEmailModalOpen && (
+        <HODEmailModal
+          isOpen={isEmailModalOpen}
+          onClose={() => setIsEmailModalOpen(false)}
+          employees={employees}
+          initialDepartment={emailInitialDept}
+          onMarkEmailSent={handleMarkEmailSent}
+          departments={departments}
+        />
+      )}
 
-      <MRFFormModal
-        isOpen={isMRFModalOpen}
-        onClose={() => {
-          setIsMRFModalOpen(false);
-          setSelectedMRFEmployee(null);
-        }}
-        employee={selectedMRFEmployee}
-        onSaveMRF={handleSaveMRF}
-      />
+      {isMRFModalOpen && selectedMRFEmployee && (
+        <MRFFormModal
+          isOpen={isMRFModalOpen}
+          onClose={() => {
+            setIsMRFModalOpen(false);
+            setSelectedMRFEmployee(null);
+          }}
+          employee={selectedMRFEmployee}
+          onSaveMRF={handleSaveMRF}
+        />
+      )}
 
-      <CorporateLetterModal
-        isOpen={isLetterModalOpen}
-        onClose={() => {
-          setIsLetterModalOpen(false);
-          setSelectedLetterEmployee(null);
-        }}
-        employee={selectedLetterEmployee}
-        onIssueLetter={handleIssueLetter}
-      />
+      {isLetterModalOpen && selectedLetterEmployee && (
+        <CorporateLetterModal
+          isOpen={isLetterModalOpen}
+          onClose={() => {
+            setIsLetterModalOpen(false);
+            setSelectedLetterEmployee(null);
+          }}
+          employee={selectedLetterEmployee}
+          onIssueLetter={handleIssueLetter}
+        />
+      )}
 
-      <EmployeeEditModal
-        isOpen={isEditModalOpen}
-        onClose={() => {
-          setIsEditModalOpen(false);
-          setSelectedEditEmployee(null);
-        }}
-        employee={selectedEditEmployee}
-        onSave={handleSaveEmployee}
-        departments={departments}
-      />
+      {isEditModalOpen && (
+        <EmployeeEditModal
+          isOpen={isEditModalOpen}
+          onClose={() => {
+            setIsEditModalOpen(false);
+            setSelectedEditEmployee(null);
+          }}
+          employee={selectedEditEmployee}
+          onSave={handleSaveEmployee}
+          departments={departments}
+        />
+      )}
 
-      <ActivityLogModal
-        isOpen={isActivityLogOpen}
-        onClose={() => setIsActivityLogOpen(false)}
-        logs={activityLogs}
-        onClearLogs={handleClearLogs}
-      />
+      {isActivityLogOpen && (
+        <ActivityLogModal
+          isOpen={isActivityLogOpen}
+          onClose={() => setIsActivityLogOpen(false)}
+          logs={activityLogs}
+          onClearLogs={handleClearLogs}
+        />
+      )}
+
+      {isImportModalOpen && (
+        <ImportModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onImportEmployees={handleImportEmployees}
+          departments={departments}
+        />
+      )}
 
       {/* Global Toast Notification */}
       {toastMessage && (
