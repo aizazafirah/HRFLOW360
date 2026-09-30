@@ -1,6 +1,7 @@
 import React from 'react';
-import { Mail, Download, Upload, History, RotateCcw, ShieldCheck, LogIn, Cloud, User } from 'lucide-react';
+import { Mail, Download, Upload, History, RotateCcw, ShieldCheck, LogIn, Cloud, User, FileCheck2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { MediaPrimaLogo } from './MediaPrimaLogo';
 
 interface HeaderProps {
   onOpenComposeEmail: () => void;
@@ -9,6 +10,7 @@ interface HeaderProps {
   onOpenImport: () => void;
   onResetData: () => void;
   onOpenAuth: () => void;
+  onOpenBlankMRF?: () => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
 }
@@ -20,6 +22,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenImport,
   onResetData,
   onOpenAuth,
+  onOpenBlankMRF,
   activeTab,
   setActiveTab,
 }) => {
@@ -31,13 +34,11 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Top row: 3-zone Top Bar Contract */}
         <div className="flex items-center justify-between h-16">
           {/* Zone 1: Wordmark & Firebase Cloud indicator */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-slate-900 text-white flex items-center justify-center font-bold text-sm tracking-wider shadow-xs">
-              RPM
-            </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <MediaPrimaLogo height={34} showBadge={true} />
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-base font-bold text-slate-900 tracking-tight block">
+                <span className="text-sm sm:text-base font-bold text-slate-900 tracking-tight whitespace-nowrap block">
                   HR Renewal, Probation & Letter Management
                 </span>
                 <span className="hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -45,8 +46,8 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>Firestore Cloud</span>
                 </span>
               </div>
-              <span className="text-xs text-slate-500 font-normal">
-                Media Prima Group · Human Capital Operations
+              <span className="text-xs text-slate-500 font-normal whitespace-nowrap hidden sm:block">
+                Media Prima Berhad (MPB) · Group Human Capital
               </span>
             </div>
           </div>
@@ -113,9 +114,20 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden xl:inline">Reset</span>
             </button>
 
+            {onOpenBlankMRF && (
+              <button
+                onClick={onOpenBlankMRF}
+                title="Buka / Muat Turun Borang Kosong MRF (Blank Manpower Requisition Form)"
+                className="px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-cyan-800 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs whitespace-nowrap cursor-pointer"
+              >
+                <FileCheck2 className="w-3.5 h-3.5 text-cyan-600" />
+                <span className="hidden sm:inline">Borang Kosong MRF</span>
+              </button>
+            )}
+
             <button
               onClick={onOpenComposeEmail}
-              className="px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs whitespace-nowrap"
+              className="px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs whitespace-nowrap cursor-pointer"
             >
               <Mail className="w-3.5 h-3.5" />
               <span>Compose Email</span>

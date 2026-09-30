@@ -82,22 +82,33 @@
     overflow: visible !important;
   }
 
-  /* The actual letter content printed cleanly */
-  #corporate-letter-content {
+  /* The actual letter & MRF form content printed cleanly */
+  #corporate-letter-content,
+  #mrf-form-printable-content {
     display: block !important;
     width: 100% !important;
     max-width: 100% !important;
     padding: 0 !important;
     margin: 0 !important;
-    font-size: 11pt !important;
-    line-height: 1.4 !important;
     color: #000000 !important;
     background: #ffffff !important;
     overflow: visible !important;
   }
 
-  #corporate-letter-content * {
-    color: #000000 !important;
+  #corporate-letter-content {
+    font-size: 11pt !important;
+    line-height: 1.4 !important;
+  }
+
+  #mrf-form-printable-content {
+    font-size: 9pt !important;
+    line-height: 1.25 !important;
+  }
+
+  #corporate-letter-content *,
+  #mrf-form-printable-content * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Retain acceptance table gray header and black border */
@@ -107,6 +118,17 @@
     background-color: #e2e8f0 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  /* Retain MRF cyan highlights in print */
+  #mrf-form-printable-content .border-cyan-400,
+  #mrf-form-printable-content [class*="border-cyan"] {
+    border-color: #00e5ff !important;
+  }
+  #mrf-form-printable-content .bg-cyan-400,
+  #mrf-form-printable-content .bg-cyan-500,
+  #mrf-form-printable-content [class*="bg-cyan"] {
+    background-color: #00e5ff !important;
   }
 
   /* Prevent page breaks inside signature blocks or acceptance table */

@@ -127,19 +127,24 @@ export default function App() {
     }, 3500);
   };
 
-  // Support direct MRF deep link from notification email (?action=mrf&employeeId=...)
+  // Support direct MRF deep link from notification email (?action=mrf&department=...)
   useEffect(() => {
-    if (typeof window === 'undefined' || employees.length === 0) return;
+    if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const action = params.get('action');
     const empId = params.get('employeeId');
     const dept = params.get('department');
 
-    if (action === 'mrf' && empId) {
-      const target = employees.find((e) => e.id === empId || e.employeeCode === empId);
-      if (target) {
-        setSelectedMRFEmployee(target);
-        setIsMRFModalOpen(true);
+    if (action === 'mrf' || action === 'blank-mrf') {
+      if (empId && employees.length > 0) {
+        const target = employees.find((e) => e.id === empId || e.employeeCode === empId);
+        setSelectedMRFEmployee(target || null);
+      } else {
+        setSelectedMRFEmployee(null);
+      }
+      setIsMRFModalOpen(true);
+      if (dept) {
+        setFilters((prev) => ({ ...prev, department: dept }));
       }
     } else if (dept) {
       setFilters((prev) => ({ ...prev, department: dept }));
@@ -680,7 +685,7 @@ export default function App() {
 
       const csvContent = [headers.join(','), ...rows].join('\r\n');
       const blob = new Blob(['\ufeff', csvContent], { type: 'text/csv;charset=utf-8;' });
-      const filename = `HR_RPM_Export_${new Date().toISOString().slice(0, 10)}.csv`;
+      const filename = `MPB_HR_Renewal_Export_${new Date().toISOString().slice(0, 10)}.csv`;
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -729,6 +734,10 @@ export default function App() {
         onOpenImport={() => setIsImportModalOpen(true)}
         onResetData={handleResetData}
         onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenBlankMRF={() => {
+          setSelectedMRFEmployee(null);
+          setIsMRFModalOpen(true);
+        }}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
       />
@@ -803,13 +812,13 @@ export default function App() {
           onMarkEmailSent={handleMarkEmailSent}
           departments={departments}
           onOpenMRF={(emp) => {
-            setSelectedMRFEmployee(emp);
+            setSelectedMRFEmployee(emp || null);
             setIsMRFModalOpen(true);
           }}
         />
       )}
 
-      {isMRFModalOpen && selectedMRFEmployee && (
+      {isMRFModalOpen && (
         <MRFFormModal
           isOpen={isMRFModalOpen}
           onClose={() => {
@@ -905,7 +914,7 @@ export default function App() {
       <footer className="no-print mt-auto border-t border-slate-200 py-4 bg-white text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>
-            HR-RPM System v1.3 · Single HR Admin Edition · LocalStorage Persistent
+            Media Prima Berhad · Group Human Capital · HRFLOW360
           </div>
           <div className="text-[11px] text-slate-400">
             Media Prima Berhad · Group Human Capital Division · Bangsar, Kuala Lumpur

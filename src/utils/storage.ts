@@ -50,7 +50,7 @@ export const loadActivityLogs = (): ActivityLog[] => {
           id: 'log-1',
           timestamp: new Date().toISOString(),
           action: 'System Initialized',
-          details: 'HR-RPM System initialized with 30 employee records across 8 departments.',
+          details: 'Media Prima Berhad (MPB) HR System initialized with 30 employee records across 8 departments.',
           type: 'system',
         },
       ];

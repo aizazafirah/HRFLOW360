@@ -25,7 +25,7 @@ interface HODEmailModalProps {
   initialDepartment?: string;
   onMarkEmailSent: (employeeIds: string[], department: string) => void;
   departments: string[];
-  onOpenMRF?: (employee: Employee) => void;
+  onOpenMRF?: (employee?: Employee | null) => void;
 }
 
 export const HODEmailModal: React.FC<HODEmailModalProps> = ({
@@ -74,7 +74,7 @@ export const HODEmailModal: React.FC<HODEmailModalProps> = ({
   const emailSubject = `[${selectedDept}] : Notification of Contract Renewal & MRF Appraisal Request for ${currentYear} - ${selectedMonthYear}`;
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://mediaprima-hrflow360.web.app';
-  const deptPortalLink = `${baseUrl}/?department=${encodeURIComponent(selectedDept)}`;
+  const deptPortalLink = `${baseUrl}/?action=mrf&department=${encodeURIComponent(selectedDept)}`;
 
   const getEmployeeMRFLink = (emp: Employee) => {
     return `${baseUrl}/?action=mrf&employeeId=${emp.id}`;
@@ -123,35 +123,30 @@ export const HODEmailModal: React.FC<HODEmailModalProps> = ({
   };
 
   const generateMRFAttachmentsHtml = () => {
-    if (!includeMrfLinks || departmentEmployees.length === 0) return '';
-
-    const linkItems = departmentEmployees
-      .map(
-        (emp) => `
-        <li style="margin-bottom: 8px; font-size: 12px; color: #0f172a;">
-          <strong>[${emp.employeeCode}] ${emp.name}</strong> - ${emp.positionTitle}:<br/>
-          <a href="${getEmployeeMRFLink(emp)}" style="color: #4338ca; text-decoration: underline; font-weight: bold;" target="_blank">
-            👉 Open Online MRF Appraisal Form for ${emp.name}
-          </a>
-        </li>
-      `
-      )
-      .join('');
+    if (!includeMrfLinks) return '';
 
     return `
       <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px; margin: 16px 0;">
-        <h4 style="margin: 0 0 10px 0; font-size: 13px; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px;">
-          📎 Digital MRF Online Access Links (No Paper Required):
+        <h4 style="margin: 0 0 8px 0; font-size: 13px; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px;">
+          📎 Lampiran & Pautan Borang MRF (Manpower Requisition Form):
         </h4>
         <p style="margin: 0 0 12px 0; font-size: 12px; color: #475569;">
-          Please click each employee's direct link below to submit your HOD appraisal and recommendations (Renewal, Confirmation, Extension, or Cessation) online:
+          Pihak jabatan boleh melengkapkan borang perakuan secara terus melalui pautan digital di bawah atau menggunakan lampiran borang kosong yang disertakan:
         </p>
-        <ul style="padding-left: 20px; margin: 0;">
-          ${linkItems}
-        </ul>
-        <div style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed #cbd5e1; font-size: 11px; color: #64748b;">
-          🌐 Or access the complete department overview: <a href="${deptPortalLink}" style="color: #4338ca; font-weight: bold;">${deptPortalLink}</a>
+        <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 10px;">
+          <div style="font-size: 12px; margin-bottom: 8px;">
+            <strong>🌐 Pautan Borang MRF Digital Jabatan:</strong><br/>
+            <a href="${deptPortalLink}" style="color: #4338ca; text-decoration: underline; font-weight: bold;" target="_blank">
+              ${deptPortalLink}
+            </a>
+          </div>
+          <div style="font-size: 12px; color: #334155;">
+            <strong>📎 Lampiran:</strong> Borang Kosong Manpower Requisition Form (MRF Form - Format Rasmi Media Prima Berhad)
+          </div>
         </div>
+        <p style="margin: 0; font-size: 11px; color: #64748b;">
+          * Sila lengkapkan borang bagi setiap kakitangan yang terlibat untuk melancarkan urusan pembaharuan / pengesahan jawatan.
+        </p>
       </div>
     `;
   };
@@ -160,13 +155,7 @@ export const HODEmailModal: React.FC<HODEmailModalProps> = ({
 
   const getPlainMRFText = () => {
     if (!includeMrfLinks) return '';
-    const links = departmentEmployees
-      .map(
-        (e) => `• [${e.employeeCode}] ${e.name} (${e.positionTitle})\n  Direct MRF Link: ${getEmployeeMRFLink(e)}`
-      )
-      .join('\n\n');
-
-    return `\n\n=======================================================\nDIGITAL MRF SUBMISSION LINKS (ONLINE APPRAISAL ACCESS):\n=======================================================\nPlease click on the links below to complete the Manpower Requisition Form (MRF) digitally for each staff:\n\n${links}\n\nDepartment Portal Overview:\n${deptPortalLink}\n=======================================================\n`;
+    return `\n\n=======================================================\nLAMPIRAN & PAUTAN BORANG MRF (MANPOWER REQUISITION FORM):\n=======================================================\n1. Pautan Borang MRF Digital Jabatan:\n   ${deptPortalLink}\n\n2. Lampiran Fail: Borang Kosong MRF (Blank Manpower Requisition Form)\n   Pihak jabatan boleh melengkapkan borang perakuan secara terus melalui pautan digital di atas atau menggunakan borang kosong yang dilampirkan.\n=======================================================\n`;
   };
 
   const emailBodyClosing = `Please submit the completed Manpower Requisition Form (MRF) for the employee(s) with expired or upcoming contract end dates so that Group Human Capital can finalize the renewal and contract preparation process without operational disruption.\n\nShould you require any clarification regarding the evaluation rubric or compensation benchmarks, please do not hesitate to reach out to the undersigned.\n\nThank you.\n\nBest regards,\nGroup Human Capital Division\nMedia Prima Berhad\nBalai Berita, 31 Jalan Riong, Bangsar, 59100 Kuala Lumpur`;
@@ -468,72 +457,74 @@ export const HODEmailModal: React.FC<HODEmailModalProps> = ({
 
             {/* DIRECT MRF ACCESS LINKS (ATTACHMENT) */}
             {includeMrfLinks && (
-              <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-4 space-y-2.5">
+              <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <FileCheck2 className="w-4 h-4 text-indigo-600" />
                     <span className="font-bold text-slate-900 text-xs uppercase tracking-wider">
-                      📎 Online MRF Submission Portal & Direct Links (Attachment)
+                      📎 Lampiran Borang Kosong & Pautan MRF Digital Jabatan
                     </span>
                   </div>
                   <span className="text-[10px] text-indigo-700 font-semibold bg-indigo-100/70 px-2 py-0.5 rounded">
-                    Digital Access Enabled
+                    Borang Kosong Dilampirkan
                   </span>
                 </div>
 
                 <p className="text-slate-600 text-xs">
-                  Please click on each employee's direct link below to fill and submit their Manpower
-                  Requisition Form (MRF) recommendation directly online:
+                  Pihak jabatan boleh melengkapkan borang perakuan pembaharuan / pengesahan jawatan secara terus
+                  melalui pautan digital jabatan di bawah atau mencetak / memuat turun lampiran borang kosong yang disediakan:
                 </p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                  {departmentEmployees.map((emp) => (
-                    <div
-                      key={emp.id}
-                      className="bg-white border border-indigo-200/80 rounded-lg p-2.5 hover:border-indigo-400 transition-colors flex items-center justify-between gap-2 shadow-2xs"
-                    >
-                      <div className="min-w-0">
-                        <div className="font-bold text-slate-900 text-xs truncate">
-                          {emp.employeeCode} · {emp.name}
-                        </div>
-                        <div className="text-[11px] text-slate-500 truncate">
-                          {emp.positionTitle}
-                        </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  {/* Digital Portal Link Box */}
+                  <div className="bg-white border border-indigo-200 rounded-lg p-3 shadow-2xs flex flex-col justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <Link className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Pautan Borang MRF Digital ({selectedDept})</span>
                       </div>
-
-                      {onOpenMRF ? (
-                        <button
-                          type="button"
-                          onClick={() => onOpenMRF(emp)}
-                          title="Open MRF form"
-                          className="px-2.5 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors flex items-center gap-1 shrink-0"
-                        >
-                          <span>Open MRF</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </button>
-                      ) : (
-                        <a
-                          href={getEmployeeMRFLink(emp)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-2.5 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors flex items-center gap-1 shrink-0"
-                        >
-                          <span>Open MRF</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      )}
+                      <div className="text-[11px] text-slate-500 mt-1 break-all font-mono">
+                        {deptPortalLink}
+                      </div>
                     </div>
-                  ))}
+                    {onOpenMRF && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenMRF(null)}
+                        className="px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-colors flex items-center justify-center gap-1.5 w-full cursor-pointer"
+                      >
+                        <span>Buka Borang MRF Digital (Borang Kosong)</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Blank MRF Form Attachment Box */}
+                  <div className="bg-white border border-indigo-200 rounded-lg p-3 shadow-2xs flex flex-col justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <Paperclip className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Borang Kosong MRF (Blank Attachment)</span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-1">
+                        Format rasmi Media Prima Berhad (MPB) tanpa butiran kakitangan. Sedia untuk diisi oleh jabatan / HOD.
+                      </div>
+                    </div>
+                    {onOpenMRF && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenMRF(null)}
+                        className="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md transition-colors flex items-center justify-center gap-1.5 w-full cursor-pointer"
+                      >
+                        <span>Buka / Cetak Borang Kosong (A4)</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="pt-1 text-[11px] text-slate-500 flex items-center gap-1.5">
-                  <Link className="w-3 h-3 text-indigo-500" />
-                  <span>
-                    Department Overview Link:{' '}
-                    <strong className="text-indigo-900 font-mono text-[10px] break-all">
-                      {deptPortalLink}
-                    </strong>
-                  </span>
+                <div className="text-[11px] text-slate-500 pt-0.5">
+                  * Borang kosong dilampirkan bersama pautan langsung bagi memudahkan pengisian kendiri oleh jabatan.
                 </div>
               </div>
             )}

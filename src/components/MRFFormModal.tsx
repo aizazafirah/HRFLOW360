@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { Employee, MRFRecord } from '../types/hr';
 import { formatDate, formatCurrency, addMonths } from '../utils/dateUtils';
 import {
@@ -11,6 +13,9 @@ import {
   Check,
   Edit3,
   Eye,
+  FileDown,
+  Loader2,
+  RotateCcw,
 } from 'lucide-react';
 
 interface MRFFormModalProps {
@@ -26,83 +31,150 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
   employee,
   onSaveMRF,
 }) => {
+  // Safe fallback values when rendering a blank form or employee is null
+  const empPosition = employee?.positionTitle || '';
+  const empBU = employee?.businessUnit || 'Media Prima Berhad';
+  const empDept = employee?.department || 'Operations';
+  const empBUDept = employee ? `${employee.businessUnit} / ${employee.department}` : 'Media Prima Berhad';
+  const empExpiry = employee ? formatDate(employee.contractExpiryDate) : '';
+  const empSalary = employee ? `RM ${employee.currentSalary.toLocaleString()}` : '';
+  const empName = employee?.name || '';
+  const empCode = employee?.employeeCode || '';
+  const empSuperior = employee?.superiorName || '';
+  const empSuperiorDesignation = employee?.superiorDesignation || '';
+  const empHOD = employee?.hodName || '';
+  const empHODDesignation = employee ? `Head of ${employee.department}` : 'Head of Department';
+
   // View mode: 'preview' (Official Template matching PDF 2) vs 'edit' (Interactive form inputs)
   const [viewMode, setViewMode] = useState<'preview' | 'edit'>('preview');
 
-  // Initialize or hydrate MRF state from employee's current data or intelligent defaults
+  // Initialize MRF state - defaults to BLANK official template (Borang Kosong) as requested
   const [formData, setFormData] = useState<MRFRecord>(() => {
     const existing = employee?.mrfData;
-    const defaultStartDate = employee?.contractExpiryDate || new Date().toISOString().split('T')[0];
-    const defaultEndDate = addMonths(defaultStartDate, 12);
 
     return {
-      position: existing?.position || employee?.positionTitle || '',
+      position: existing?.position || '',
       noOfPeopleRequired: existing?.noOfPeopleRequired || '1',
-      companyDivision: existing?.companyDivision || `${employee?.businessUnit || 'Media Prima Berhad'} / ${employee?.department || 'Operations'}`,
-      dateRequired: existing?.dateRequired || employee?.contractExpiryDate || '',
-      estimatedBudget: existing?.estimatedBudget || `RM ${(employee?.currentSalary || 5000).toLocaleString()} / month (Budgeted in AOP)`,
+      companyDivision: existing?.companyDivision || (employee ? `${employee.businessUnit} / ${employee.department}` : 'Media Prima Berhad'),
+      dateRequired: existing?.dateRequired || '',
+      estimatedBudget: existing?.estimatedBudget || '',
       requisitionFor: existing?.requisitionFor || 'RENEWAL',
       statusOfEmployee: existing?.statusOfEmployee || (employee?.actionType === 'Probation Confirmation' ? 'PERMANENT' : 'CONTRACT'),
 
-      name: existing?.name || employee?.name || '',
-      staffNo: existing?.staffNo || employee?.employeeCode || '',
-      pmsRating: existing?.pmsRating || '4.2 / Exceeds Expectations',
-      lengthOfService: existing?.lengthOfService || '2 Years 4 Months',
-      overallComments: existing?.overallComments || `Consistently displays high professionalism, meets all project milestones and departmental deadlines. Highly recommended for renewal.`,
+      name: existing?.name || '',
+      staffNo: existing?.staffNo || '',
+      pmsRating: existing?.pmsRating || '',
+      lengthOfService: existing?.lengthOfService || '',
+      overallComments: existing?.overallComments || '',
 
-      benefitsToCompany: existing?.benefitsToCompany || `Ensures continuous operation and service reliability for ${employee?.department || 'department'} deliverables without disruption.`,
-      impactIfNotApproved: existing?.impactIfNotApproved || `Critical operational workflows and key project delivery timelines will experience substantial delays.`,
-      distributionOfWorkload: existing?.distributionOfWorkload || `Workload would need to be absorbed by existing team members, causing operational bottleneck and potential burnout.`,
+      benefitsToCompany: existing?.benefitsToCompany || '',
+      impactIfNotApproved: existing?.impactIfNotApproved || '',
+      distributionOfWorkload: existing?.distributionOfWorkload || '',
 
-      jobDescription: existing?.jobDescription || `Responsible for day-to-day ${employee?.positionTitle || 'operations'}, reporting, inter-departmental liaisons, and compliance with Media Prima corporate governance standards.`,
-      qualificationsAndSkills: existing?.qualificationsAndSkills || `Relevant tertiary qualification / professional degree, minimum 3 years industry experience, strong technical capability in ${employee?.department || 'department'} systems.`,
+      jobDescription: existing?.jobDescription || '',
+      qualificationsAndSkills: existing?.qualificationsAndSkills || '',
 
-      requestedByName: existing?.requestedByName || employee?.superiorName || '',
-      requestedByDesignation: existing?.requestedByDesignation || employee?.superiorDesignation || '',
-      requestedByDate: existing?.requestedByDate || '2026-09-20',
-      recommendedByName: existing?.recommendedByName || employee?.hodName || '',
-      recommendedByDesignation: existing?.recommendedByDesignation || `Head of ${employee?.department || 'Department'}`,
-      recommendedByDate: existing?.recommendedByDate || '2026-09-22',
+      requestedByName: existing?.requestedByName || '',
+      requestedByDesignation: existing?.requestedByDesignation || '',
+      requestedByDate: existing?.requestedByDate || '',
+      recommendedByName: existing?.recommendedByName || '',
+      recommendedByDesignation: existing?.recommendedByDesignation || '',
+      recommendedByDate: existing?.recommendedByDate || '',
 
       isPositionBudgeted: existing?.isPositionBudgeted ?? true,
       totalHeadcount: existing?.totalHeadcount || '1',
-      hrRemarks: existing?.hrRemarks || 'RECOMMENDED - Position is budgeted within approved headcount quota.',
+      hrRemarks: existing?.hrRemarks || '',
       hrSignatureName: existing?.hrSignatureName || 'Sylvia Singaraim',
-      hrSignatureDate: existing?.hrSignatureDate || '2026-09-24',
+      hrSignatureDate: existing?.hrSignatureDate || '',
 
       gmHrPermanent: existing?.gmHrPermanent || false,
       gmHrContract: existing?.gmHrContract ?? true,
       gmHrKiv: existing?.gmHrKiv || false,
       gmHrKivUntil: existing?.gmHrKivUntil || '',
       gmHrNotApproved: existing?.gmHrNotApproved || false,
-      gmHrContractPeriod: existing?.gmHrContractPeriod || '12 MONTHS (1 YEAR)',
-      gmHrSignatureDate: existing?.gmHrSignatureDate || '2026-09-25',
+      gmHrContractPeriod: existing?.gmHrContractPeriod || '',
+      gmHrSignatureDate: existing?.gmHrSignatureDate || '',
 
       ceoPermanent: existing?.ceoPermanent || false,
       ceoContract: existing?.ceoContract ?? true,
       ceoKiv: existing?.ceoKiv || false,
       ceoKivUntil: existing?.ceoKivUntil || '',
       ceoNotApproved: existing?.ceoNotApproved || false,
-      ceoContractPeriod: existing?.ceoContractPeriod || '12 MONTHS (1 YEAR)',
-      ceoSignatureDate: existing?.ceoSignatureDate || '2026-09-26',
+      ceoContractPeriod: existing?.ceoContractPeriod || '',
+      ceoSignatureDate: existing?.ceoSignatureDate || '',
 
-      recommendationType: existing?.recommendationType || (employee?.actionType === 'Probation Confirmation' ? 'Confirm' : 'Renew'),
-      proposedPeriod: existing?.proposedPeriod || '12 Months (1 Year Extension)',
-      proposedStartDate: existing?.proposedStartDate || defaultStartDate,
-      proposedEndDate: existing?.proposedEndDate || defaultEndDate,
-      proposedSalary: existing?.proposedSalary || formatCurrency((employee?.currentSalary || 5000) * 1.05),
-      justification: existing?.justification || `Employee has demonstrated strong performance, meeting all key quarterly deliverables.`,
-      superiorRemarks: existing?.superiorRemarks || `Consistently exhibits professionalism, operational agility, and high teamwork standards. Strongly recommended for approval.`,
+      recommendationType: existing?.recommendationType || 'Renew',
+      proposedPeriod: existing?.proposedPeriod || '12 Months',
+      proposedStartDate: existing?.proposedStartDate || '',
+      proposedEndDate: existing?.proposedEndDate || '',
+      proposedSalary: existing?.proposedSalary || '',
+      justification: existing?.justification || '',
+      superiorRemarks: existing?.superiorRemarks || '',
       headcountBudget: existing?.headcountBudget || 'Budgeted in AOP',
-      superiorRecommendedDate: existing?.superiorRecommendedDate || '2026-09-20',
-      hrVerifiedDate: existing?.hrVerifiedDate || '2026-09-25',
+      superiorRecommendedDate: existing?.superiorRecommendedDate || '',
+      hrVerifiedDate: existing?.hrVerifiedDate || '',
       hodApprovedDate: existing?.hodApprovedDate || null,
       status: existing?.status || 'Draft',
     };
   });
 
+  // Optional: populate staff details if user explicitly desires to auto-fill
+  const handlePopulateStaffDetails = () => {
+    if (!employee) return;
+    setFormData((prev) => ({
+      ...prev,
+      position: employee.positionTitle,
+      noOfPeopleRequired: '1',
+      companyDivision: `${employee.businessUnit} / ${employee.department}`,
+      dateRequired: formatDate(employee.contractExpiryDate),
+      estimatedBudget: `RM ${employee.currentSalary.toLocaleString()} / month (Budgeted in AOP)`,
+      requisitionFor: employee.actionType === 'Probation Confirmation' ? 'REPLACEMENT' : 'RENEWAL',
+      statusOfEmployee: employee.actionType === 'Probation Confirmation' ? 'PERMANENT' : 'CONTRACT',
+      name: employee.name,
+      staffNo: employee.employeeCode,
+      pmsRating: '4.2 / Exceeds Expectations',
+      lengthOfService: '2 Years 4 Months',
+      overallComments: 'Consistently displays high professionalism, meets all project milestones and departmental deadlines. Highly recommended for renewal.',
+      benefitsToCompany: `Ensures continuous operation and service reliability for ${employee.department} deliverables without disruption.`,
+      impactIfNotApproved: 'Critical operational workflows and key project delivery timelines will experience substantial delays.',
+      distributionOfWorkload: 'Workload would need to be absorbed by existing team members, causing operational bottleneck and potential burnout.',
+      jobDescription: `Responsible for day-to-day ${employee.positionTitle} operations, reporting, and compliance.`,
+      qualificationsAndSkills: `Relevant tertiary qualification, minimum 3 years industry experience in ${employee.department}.`,
+      requestedByName: employee.superiorName,
+      requestedByDesignation: employee.superiorDesignation,
+      requestedByDate: '2026-09-20',
+      recommendedByName: employee.hodName,
+      recommendedByDesignation: `Head of ${employee.department}`,
+      recommendedByDate: '2026-09-22',
+      hrRemarks: 'RECOMMENDED - Position is budgeted within approved headcount quota.',
+      hrSignatureDate: '2026-09-24',
+      gmHrSignatureDate: '2026-09-25',
+      ceoSignatureDate: '2026-09-26',
+    }));
+  };
+
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
   const [downloadSuccess, setDownloadSuccess] = useState<boolean>(false);
+  const [pdfSuccess, setPdfSuccess] = useState<boolean>(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+  const printableRef = useRef<HTMLDivElement>(null);
+
+  // Helper to safely convert any oklch color string to sRGB using browser canvas 2d context
+  const safeConvertOklch = (colorVal: string): string => {
+    if (!colorVal || typeof colorVal !== 'string') return '#000000';
+    if (!colorVal.includes('oklch')) return colorVal;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return '#000000';
+      ctx.fillStyle = colorVal;
+      return ctx.fillStyle || '#000000';
+    } catch {
+      return '#000000';
+    }
+  };
 
   // Update form if employee changes
   useEffect(() => {
@@ -111,18 +183,183 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
     }
   }, [employee]);
 
+  // 1. Clean Print Functionality: switches to preview mode and triggers browser A4 print dialog
   const handlePrint = () => {
-    window.print();
+    if (viewMode !== 'preview') {
+      setViewMode('preview');
+      setTimeout(() => {
+        window.print();
+      }, 150);
+    } else {
+      window.print();
+    }
+  };
+
+  // 2. Direct PDF Generation via jsPDF and html2canvas with oklch sanitization
+  const handleGeneratePdf = async () => {
+    if (!employee) return;
+    setIsGeneratingPdf(true);
+
+    try {
+      if (viewMode !== 'preview') {
+        setViewMode('preview');
+        await new Promise((r) => setTimeout(r, 150));
+      }
+
+      const element = printableRef.current;
+      if (!element) {
+        handlePrint();
+        return;
+      }
+
+      const canvas = await html2canvas(element, {
+        scale: 2.2, // Crystal sharp resolution
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        onclone: (clonedDoc) => {
+          const styleTags = clonedDoc.querySelectorAll('style');
+          styleTags.forEach((tag) => {
+            if (tag.textContent && tag.textContent.includes('oklch')) {
+              tag.textContent = tag.textContent.replace(/oklch\([^)]+\)/g, (match) => {
+                return safeConvertOklch(match);
+              });
+            }
+          });
+
+          const overrideStyle = clonedDoc.createElement('style');
+          overrideStyle.textContent = `
+            #mrf-form-printable-content {
+              background-color: #ffffff !important;
+              color: #000000 !important;
+            }
+          `;
+          clonedDoc.head.appendChild(overrideStyle);
+
+          const elements = clonedDoc.querySelectorAll('#mrf-form-printable-content, #mrf-form-printable-content *');
+          elements.forEach((el) => {
+            const htmlEl = el as HTMLElement;
+            try {
+              const comp = window.getComputedStyle(htmlEl);
+              ['color', 'backgroundColor', 'borderColor', 'outlineColor'].forEach((prop) => {
+                const val = (comp as any)[prop];
+                if (typeof val === 'string' && val.includes('oklch')) {
+                  htmlEl.style.setProperty(prop, safeConvertOklch(val), 'important');
+                }
+              });
+            } catch (e) {
+              // ignore
+            }
+          });
+        },
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pdfWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+      heightLeft -= pdfHeight;
+
+      while (heightLeft > 5) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST');
+        heightLeft -= pdfHeight;
+      }
+
+      const filename = employee && formData.name ? `${employee.employeeCode}_MRF_Form.pdf` : 'Borang_Kosong_MRF_Media_Prima_MPB.pdf';
+      pdf.save(filename);
+
+      setPdfSuccess(true);
+      setTimeout(() => setPdfSuccess(false), 2500);
+    } catch (err) {
+      console.error('MRF PDF generation error, falling back to print dialog:', err);
+      handlePrint();
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  const handleClearToBlank = () => {
+    setFormData({
+      position: '',
+      noOfPeopleRequired: '',
+      companyDivision: employee ? `${employee.businessUnit} / ${employee.department}` : 'Media Prima Berhad',
+      dateRequired: '',
+      estimatedBudget: '',
+      requisitionFor: 'RENEWAL',
+      statusOfEmployee: 'CONTRACT',
+      name: '',
+      staffNo: '',
+      pmsRating: '',
+      lengthOfService: '',
+      overallComments: '',
+      benefitsToCompany: '',
+      impactIfNotApproved: '',
+      distributionOfWorkload: '',
+      jobDescription: '',
+      qualificationsAndSkills: '',
+      requestedByName: '',
+      requestedByDesignation: '',
+      requestedByDate: '',
+      recommendedByName: '',
+      recommendedByDesignation: '',
+      recommendedByDate: '',
+      isPositionBudgeted: true,
+      totalHeadcount: '1',
+      hrRemarks: '',
+      hrSignatureName: 'Sylvia Singaraim',
+      hrSignatureDate: '',
+      gmHrPermanent: false,
+      gmHrKiv: false,
+      gmHrKivUntil: '',
+      gmHrNotApproved: false,
+      gmHrContract: true,
+      gmHrContractPeriod: '12 MONTHS (1 YEAR)',
+      gmHrSignatureDate: '',
+      ceoPermanent: false,
+      ceoKiv: false,
+      ceoKivUntil: '',
+      ceoNotApproved: false,
+      ceoContract: true,
+      ceoContractPeriod: '12 MONTHS (1 YEAR)',
+      ceoSignatureDate: '',
+      recommendationType: 'Renew',
+      proposedPeriod: '12 Months',
+      proposedStartDate: '',
+      proposedEndDate: '',
+      proposedSalary: '',
+      justification: '',
+      superiorRemarks: '',
+      headcountBudget: 'Budgeted in AOP',
+      superiorRecommendedDate: '',
+      hrVerifiedDate: '',
+      hodApprovedDate: null,
+      status: 'Draft',
+    });
+    setViewMode('preview');
   };
 
   const handleDownloadWord = () => {
-    if (!employee) return;
     try {
+      const docTitle = employee ? `Manpower Requisition Form - ${employee.name}` : 'Borang Kosong MRF - Media Prima Berhad';
       const docHtml = `<!DOCTYPE html>
 <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
 <head>
   <meta charset='utf-8'>
-  <title>Manpower Requisition Form - ${employee.name}</title>
+  <title>Manpower Requisition Form - ${employee?.name || 'Borang Kosong (MPB)'}</title>
   <style>
     @page { size: A4 portrait; margin: 10mm; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; line-height: 1.25; color: #000; }
@@ -156,19 +393,19 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
     <table>
       <tr>
         <td style="width: 15%; font-weight: bold;">POSITION</td>
-        <td style="width: 35%;" class="underline">${formData.position || employee.positionTitle}</td>
+        <td style="width: 35%;" class="underline">${formData.position || empPosition}</td>
         <td style="width: 25%; font-weight: bold;">NO OF PEOPLE REQUIRED</td>
         <td style="width: 25%;" class="underline">${formData.noOfPeopleRequired || '1'}</td>
       </tr>
       <tr>
         <td style="font-weight: bold;">COMPANY/DIVISION</td>
-        <td class="underline">${formData.companyDivision || `${employee.businessUnit} / ${employee.department}`}</td>
+        <td class="underline">${formData.companyDivision || empBUDept}</td>
         <td style="font-weight: bold;">DATE REQUIRED</td>
-        <td class="underline">${formData.dateRequired || formatDate(employee.contractExpiryDate)}</td>
+        <td class="underline">${formData.dateRequired || empExpiry}</td>
       </tr>
       <tr>
         <td style="font-weight: bold;">ESTIMATED BUDGET</td>
-        <td colspan="3" class="underline">${formData.estimatedBudget || `RM ${employee.currentSalary.toLocaleString()}`}</td>
+        <td colspan="3" class="underline">${formData.estimatedBudget || empSalary}</td>
       </tr>
       <tr>
         <td colspan="4" style="padding-top: 4px;">
@@ -197,9 +434,9 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
     <table>
       <tr>
         <td style="width: 15%; font-weight: bold;">NAME</td>
-        <td style="width: 35%;" class="underline">${formData.name || employee.name}</td>
+        <td style="width: 35%;" class="underline">${formData.name || empName}</td>
         <td style="width: 20%; font-weight: bold;">STAFF NO</td>
-        <td style="width: 30%;" class="underline">${formData.staffNo || employee.employeeCode}</td>
+        <td style="width: 30%;" class="underline">${formData.staffNo || empCode}</td>
       </tr>
       <tr>
         <td style="font-weight: bold;">PMS RATING (TO DATE)</td>
@@ -229,7 +466,7 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
     <!-- Section D -->
     <div class="header-bar">D. JOB DESCRIPTION OF REQUESTED POSITION (If space is insufficient, please include attachments)</div>
     <table>
-      <tr><td class="underline">${formData.jobDescription || `Responsible for ${employee.positionTitle} operations and compliance.`}</td></tr>
+      <tr><td class="underline">${formData.jobDescription || (empPosition ? `Responsible for ${empPosition} operations and compliance.` : '')}</td></tr>
     </table>
 
     <!-- Section E -->
@@ -246,12 +483,12 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
         <td style="width: 50%; font-weight: bold;">RECOMMENDED BY HEAD OF DIVISION:</td>
       </tr>
       <tr>
-        <td>NAME: <span class="underline">${formData.requestedByName || employee.superiorName}</span></td>
-        <td>NAME: <span class="underline">${formData.recommendedByName || employee.hodName}</span></td>
+        <td>NAME: <span class="underline">${formData.requestedByName || empSuperior}</span></td>
+        <td>NAME: <span class="underline">${formData.recommendedByName || empHOD}</span></td>
       </tr>
       <tr>
-        <td>DESIGNATION: <span class="underline">${formData.requestedByDesignation || employee.superiorDesignation}</span></td>
-        <td>DESIGNATION: <span class="underline">${formData.recommendedByDesignation || `Head of ${employee.department}`}</span></td>
+        <td>DESIGNATION: <span class="underline">${formData.requestedByDesignation || empSuperiorDesignation}</span></td>
+        <td>DESIGNATION: <span class="underline">${formData.recommendedByDesignation || empHODDesignation}</span></td>
       </tr>
       <tr>
         <td style="padding-top: 14pt;">(Signature) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; (Date: ${formData.requestedByDate || '2026-09-20'})</td>
@@ -329,7 +566,7 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
 </html>`;
 
       const blob = new Blob(['\ufeff', docHtml], { type: 'application/msword;charset=utf-8' });
-      const filename = `${employee.employeeCode}_MRF_Form.doc`;
+      const filename = employee && formData.name ? `${employee.employeeCode}_MRF_Form.doc` : 'Borang_Kosong_MRF_Media_Prima_MPB.doc';
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -349,7 +586,14 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
   };
 
   const handleSave = (submit: boolean = false) => {
-    if (!employee) return;
+    if (!employee) {
+      setSavedSuccess(true);
+      setTimeout(() => {
+        setSavedSuccess(false);
+        if (submit) onClose();
+      }, 1200);
+      return;
+    }
     const updatedMRF: MRFRecord = {
       ...formData,
       status: submit ? 'Submitted' : formData.status,
@@ -363,7 +607,7 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
     }, 1500);
   };
 
-  if (!isOpen || !employee) return null;
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print-document-container">
@@ -375,16 +619,45 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
               <FileCheck2 className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-900">
-                Manpower Requisition Form (MRF)
+              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <span>Manpower Requisition Form (MRF)</span>
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-800 border border-cyan-300">
+                  Borang Kosong
+                </span>
               </h2>
-              <p className="text-[11px] text-slate-500 font-mono">
-                Official Template · {employee.name} ({employee.employeeCode})
+              <p className="text-[11px] text-slate-500">
+                Format Rasmi Media Prima Berhad (MPB) · Lampiran Borang Kosong untuk Jabatan
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Quick Toggle if employee opened */}
+            {employee && (
+              <div className="flex items-center gap-1 bg-slate-200/70 p-0.5 rounded-lg text-[11px]">
+                <button
+                  type="button"
+                  onClick={handleClearToBlank}
+                  className={`px-2 py-1 font-semibold rounded-md transition-colors ${
+                    !formData.name ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Format Borang Kosong tanpa butiran kakitangan"
+                >
+                  Borang Kosong
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePopulateStaffDetails}
+                  className={`px-2 py-1 font-semibold rounded-md transition-colors ${
+                    formData.name ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title="Isi automatik dengan maklumat kakitangan"
+                >
+                  Isi Butiran Staf
+                </button>
+              </div>
+            )}
+
             {/* View Mode Toggle */}
             <div className="flex bg-slate-200 p-0.5 rounded-lg text-xs">
               <button
@@ -411,24 +684,39 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
               </button>
             </div>
 
-            {/* DOWNLOAD MRF AS WORD (.doc) BUTTON */}
+            {/* 1. DOWNLOAD PDF (DIRECT HIGH-RESOLUTION PDF) */}
             <button
-              onClick={handleDownloadWord}
-              title="Download MRF form as Microsoft Word (.doc) document"
-              className="px-3 py-1.5 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
+              onClick={handleGeneratePdf}
+              disabled={isGeneratingPdf}
+              title="Download official blank MRF form as high-resolution PDF"
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>Download Form (.doc)</span>
+              {isGeneratingPdf ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <FileDown className="w-3.5 h-3.5" />
+              )}
+              <span>{isGeneratingPdf ? 'Generating PDF...' : 'Download PDF'}</span>
             </button>
 
-            {/* PRINT / SAVE PDF BUTTON */}
+            {/* 2. PRINT A4 */}
             <button
               onClick={handlePrint}
-              title="Print document or Save as PDF"
-              className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
+              title="Print official blank MRF Form on A4 paper"
+              className="px-2.5 py-1.5 text-xs font-semibold text-slate-800 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
             >
-              <Printer className="w-3.5 h-3.5 text-slate-500" />
-              <span>Print A4 / PDF</span>
+              <Printer className="w-3.5 h-3.5 text-slate-600" />
+              <span>Print A4</span>
+            </button>
+
+            {/* 3. DOWNLOAD MRF AS WORD (.doc) */}
+            <button
+              onClick={handleDownloadWord}
+              title="Download blank MRF form as Microsoft Word (.doc) attachment"
+              className="px-3 py-1.5 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download Word (.doc)</span>
             </button>
 
             <button
@@ -456,6 +744,13 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
           </div>
         </div>
 
+        {pdfSuccess && (
+          <div className="no-print bg-rose-50 border-b border-rose-200 px-6 py-2 text-xs font-medium text-rose-800 flex items-center gap-2">
+            <Check className="w-4 h-4 text-rose-600" />
+            <span>MRF PDF form generated and downloaded successfully!</span>
+          </div>
+        )}
+
         {downloadSuccess && (
           <div className="no-print bg-cyan-50 border-b border-cyan-200 px-6 py-2 text-xs font-medium text-cyan-800 flex items-center gap-2">
             <Check className="w-4 h-4 text-cyan-600" />
@@ -474,23 +769,35 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-slate-100">
           {viewMode === 'preview' ? (
             /* OFFICIAL TEMPLATE VIEW - EXACTLY MATCHES PDF 2 */
-            <div className="bg-white border-2 border-cyan-400 p-4 sm:p-6 shadow-sm mx-auto max-w-3xl text-[11px] leading-tight text-black font-sans">
-              {/* Header with Media Prima logo and Document Title */}
-              <div className="flex items-start justify-between pb-3 border-b border-slate-200">
-                <div className="flex items-center gap-1.5">
-                  <div className="bg-rose-600 text-white font-black text-sm px-2 py-0.5 rounded-sm tracking-tight">
-                    media
+            <div
+              ref={printableRef}
+              id="mrf-form-printable-content"
+              className="bg-white border-2 border-cyan-400 p-4 sm:p-6 shadow-sm mx-auto max-w-3xl text-[11px] leading-tight text-black font-sans"
+            >
+              {/* Official MPB (Media Prima Berhad) Logo & Header */}
+              <div className="flex items-start justify-between pb-3 border-b-2 border-black">
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center overflow-hidden rounded-xs border border-black shrink-0">
+                    <span className="bg-[#E11D24] text-white font-black text-xs sm:text-sm px-2 py-0.5 tracking-tight">
+                      media
+                    </span>
+                    <span className="bg-[#111111] text-white font-black text-xs sm:text-sm px-2 py-0.5 tracking-tight">
+                      prima
+                    </span>
                   </div>
-                  <div className="text-black font-black text-base tracking-tight">
-                    prima
+                  <div className="bg-black text-white font-black text-[11px] px-1.5 py-0.5 rounded-xs tracking-wider">
+                    MPB
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-bold text-xs uppercase tracking-wide text-black">
+                  <div className="font-black text-xs uppercase tracking-wider text-black">
+                    MEDIA PRIMA BERHAD (MPB)
+                  </div>
+                  <div className="font-bold text-[10px] uppercase tracking-wide text-slate-800">
                     GROUP HUMAN RESOURCES DEPARTMENT
                   </div>
-                  <div className="font-bold italic text-xs tracking-wider text-black">
-                    MANPOWER REQUISITION FORM
+                  <div className="font-extrabold italic text-xs tracking-wider text-black">
+                    MANPOWER REQUISITION FORM (MRF)
                   </div>
                 </div>
               </div>
@@ -504,13 +811,13 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex items-baseline gap-2">
                       <span className="font-bold text-[10px] w-24 shrink-0">POSITION</span>
-                      <span className="flex-1 border-b border-black font-semibold text-[11px] truncate pb-0.5">
-                        {formData.position || employee.positionTitle}
+                      <span className="flex-1 border-b border-black font-semibold text-[11px] truncate pb-0.5 min-h-[18px]">
+                        {formData.position || <span className="text-transparent select-none">&nbsp;</span>}
                       </span>
                     </div>
                     <div className="flex items-baseline gap-2">
                       <span className="font-bold text-[10px] w-36 shrink-0">NO OF PEOPLE REQUIRED</span>
-                      <span className="flex-1 border-b border-black font-semibold text-[11px] pb-0.5">
+                      <span className="flex-1 border-b border-black font-semibold text-[11px] pb-0.5 min-h-[18px]">
                         {formData.noOfPeopleRequired || '1'}
                       </span>
                     </div>
@@ -519,22 +826,22 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex items-baseline gap-2">
                       <span className="font-bold text-[10px] w-24 shrink-0">COMPANY/DIVISION</span>
-                      <span className="flex-1 border-b border-black font-medium text-[11px] truncate pb-0.5">
-                        {formData.companyDivision || `${employee.businessUnit} / ${employee.department}`}
+                      <span className="flex-1 border-b border-black font-medium text-[11px] truncate pb-0.5 min-h-[18px]">
+                        {formData.companyDivision || 'Media Prima Berhad'}
                       </span>
                     </div>
                     <div className="flex items-baseline gap-2">
                       <span className="font-bold text-[10px] w-36 shrink-0">DATE REQUIRED</span>
-                      <span className="flex-1 border-b border-black font-medium text-[11px] pb-0.5">
-                        {formData.dateRequired || formatDate(employee.contractExpiryDate)}
+                      <span className="flex-1 border-b border-black font-medium text-[11px] pb-0.5 min-h-[18px]">
+                        {formData.dateRequired || <span className="text-transparent select-none">&nbsp;</span>}
                       </span>
                     </div>
                   </div>
 
                   <div className="flex items-baseline gap-2">
                     <span className="font-bold text-[10px] w-28 shrink-0">ESTIMATED BUDGET</span>
-                    <span className="flex-1 border-b border-black font-medium text-[11px] pb-0.5">
-                      {formData.estimatedBudget || `RM ${employee.currentSalary.toLocaleString()} / month (Budgeted in AOP)`}
+                    <span className="flex-1 border-b border-black font-medium text-[11px] pb-0.5 min-h-[18px]">
+                      {formData.estimatedBudget || <span className="text-transparent select-none">&nbsp;</span>}
                     </span>
                   </div>
 
@@ -596,14 +903,14 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex items-baseline gap-2">
                       <span className="font-bold text-[10px] w-24 shrink-0">NAME</span>
-                      <span className="flex-1 border-b border-black font-bold text-[11px] truncate pb-0.5">
-                        {formData.name || employee.name}
+                      <span className="flex-1 border-b border-black font-bold text-[11px] truncate pb-0.5 min-h-[18px]">
+                        {formData.name || <span className="text-transparent select-none">&nbsp;</span>}
                       </span>
                     </div>
                     <div className="flex items-baseline gap-2">
                       <span className="font-bold text-[10px] w-24 shrink-0">STAFF NO</span>
-                      <span className="flex-1 border-b border-black font-mono font-bold text-[11px] pb-0.5">
-                        {formData.staffNo || employee.employeeCode}
+                      <span className="flex-1 border-b border-black font-mono font-bold text-[11px] pb-0.5 min-h-[18px]">
+                        {formData.staffNo || <span className="text-transparent select-none">&nbsp;</span>}
                       </span>
                     </div>
                   </div>
@@ -611,22 +918,22 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex items-baseline gap-2">
                       <span className="font-bold text-[10px] w-28 shrink-0">PMS RATING (TO DATE)</span>
-                      <span className="flex-1 border-b border-black font-semibold text-[11px] pb-0.5">
-                        {formData.pmsRating || '4.2 / Exceeds Expectations'}
+                      <span className="flex-1 border-b border-black font-semibold text-[11px] pb-0.5 min-h-[18px]">
+                        {formData.pmsRating || <span className="text-transparent select-none">&nbsp;</span>}
                       </span>
                     </div>
                     <div className="flex items-baseline gap-2">
                       <span className="font-bold text-[10px] w-28 shrink-0">LENGTH OF SERVICE</span>
-                      <span className="flex-1 border-b border-black font-medium text-[11px] pb-0.5">
-                        {formData.lengthOfService || '2 Years 4 Months'}
+                      <span className="flex-1 border-b border-black font-medium text-[11px] pb-0.5 min-h-[18px]">
+                        {formData.lengthOfService || <span className="text-transparent select-none">&nbsp;</span>}
                       </span>
                     </div>
                   </div>
 
                   <div className="pt-1">
                     <div className="font-bold text-[10px] mb-1">OVERALL COMMENTS ON STAFF PERFORMANCE</div>
-                    <div className="border-b border-black pb-1 text-[10.5px] leading-relaxed">
-                      {formData.overallComments || 'Consistently delivers high quality work with great dedication.'}
+                    <div className="border-b border-black pb-1 text-[10.5px] leading-relaxed min-h-[24px]">
+                      {formData.overallComments || <span className="text-transparent select-none">&nbsp;</span>}
                     </div>
                   </div>
                 </div>
@@ -640,20 +947,20 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
                 <div className="border-x border-b border-cyan-200 p-2 space-y-1.5 bg-white">
                   <div>
                     <div className="font-bold text-[10px]">BENEFITS TO DEPARTMENT/COMPANY</div>
-                    <div className="border-b border-black pb-1 text-[10.5px] leading-relaxed">
-                      {formData.benefitsToCompany || 'Ensures continuity of operations and key projects.'}
+                    <div className="border-b border-black pb-1 text-[10.5px] leading-relaxed min-h-[22px]">
+                      {formData.benefitsToCompany || <span className="text-transparent select-none">&nbsp;</span>}
                     </div>
                   </div>
                   <div>
                     <div className="font-bold text-[10px]">IMPACT ON OPERATIONS IF REQUISITION IS NOT APPROVED</div>
-                    <div className="border-b border-black pb-1 text-[10.5px] leading-relaxed">
-                      {formData.impactIfNotApproved || 'Key project timelines will be delayed, impacting business performance.'}
+                    <div className="border-b border-black pb-1 text-[10.5px] leading-relaxed min-h-[22px]">
+                      {formData.impactIfNotApproved || <span className="text-transparent select-none">&nbsp;</span>}
                     </div>
                   </div>
                   <div>
                     <div className="font-bold text-[10px]">DISTRIBUTION OF THE WORKLOAD IF REQUISITION IS NOT APPROVED</div>
-                    <div className="border-b border-black pb-1 text-[10.5px] leading-relaxed">
-                      {formData.distributionOfWorkload || 'Workload would burden existing team, reducing overall team output.'}
+                    <div className="border-b border-black pb-1 text-[10.5px] leading-relaxed min-h-[22px]">
+                      {formData.distributionOfWorkload || <span className="text-transparent select-none">&nbsp;</span>}
                     </div>
                   </div>
                 </div>
@@ -665,8 +972,8 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
                   D. JOB DESCRIPTION OF REQUESTED POSITION (If space is insufficient, please include attachments)
                 </div>
                 <div className="border-x border-b border-cyan-200 p-2 bg-white">
-                  <div className="border-b border-black pb-1 text-[10.5px] leading-relaxed">
-                    {formData.jobDescription || `Responsible for ${employee.positionTitle} operations and compliance.`}
+                  <div className="border-b border-black pb-1 text-[10.5px] leading-relaxed min-h-[24px]">
+                    {formData.jobDescription || <span className="text-transparent select-none">&nbsp;</span>}
                   </div>
                 </div>
               </div>
@@ -677,8 +984,8 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
                   E. QUALIFICATIONS AND SPECIAL SKILLS (If space is insufficient, please include attachments)
                 </div>
                 <div className="border-x border-b border-cyan-200 p-2 bg-white">
-                  <div className="border-b border-black pb-1 text-[10.5px] leading-relaxed">
-                    {formData.qualificationsAndSkills || 'Relevant degree and minimum 3 years experience in relevant sector.'}
+                  <div className="border-b border-black pb-1 text-[10.5px] leading-relaxed min-h-[24px]">
+                    {formData.qualificationsAndSkills || <span className="text-transparent select-none">&nbsp;</span>}
                   </div>
                 </div>
               </div>
@@ -693,19 +1000,19 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
                     <div className="font-bold text-[10px]">REQUESTED BY :</div>
                     <div className="flex items-baseline gap-1">
                       <span className="font-bold text-[9px] w-14">NAME</span>
-                      <span className="flex-1 border-b border-black font-semibold text-[10px] pb-0.5">
-                        {formData.requestedByName || employee.superiorName}
+                      <span className="flex-1 border-b border-black font-semibold text-[10px] pb-0.5 min-h-[16px]">
+                        {formData.requestedByName || <span className="text-transparent select-none">&nbsp;</span>}
                       </span>
                     </div>
                     <div className="flex items-baseline gap-1">
                       <span className="font-bold text-[9px] w-14">DESIGNATION</span>
-                      <span className="flex-1 border-b border-black text-[10px] pb-0.5 truncate">
-                        {formData.requestedByDesignation || employee.superiorDesignation}
+                      <span className="flex-1 border-b border-black text-[10px] pb-0.5 truncate min-h-[16px]">
+                        {formData.requestedByDesignation || <span className="text-transparent select-none">&nbsp;</span>}
                       </span>
                     </div>
                     <div className="flex justify-between items-end pt-3 text-[9px]">
                       <span>(Signature)</span>
-                      <span>(Date: {formData.requestedByDate || '2026-09-20'})</span>
+                      <span>(Date: {formData.requestedByDate || '________'})</span>
                     </div>
                   </div>
 
@@ -713,19 +1020,19 @@ export const MRFFormModal: React.FC<MRFFormModalProps> = ({
                     <div className="font-bold text-[10px]">RECOMMENDED BY HEAD OF DIVISION:</div>
                     <div className="flex items-baseline gap-1">
                       <span className="font-bold text-[9px] w-14">NAME</span>
-                      <span className="flex-1 border-b border-black font-semibold text-[10px] pb-0.5">
-                        {formData.recommendedByName || employee.hodName}
+                      <span className="flex-1 border-b border-black font-semibold text-[10px] pb-0.5 min-h-[16px]">
+                        {formData.recommendedByName || <span className="text-transparent select-none">&nbsp;</span>}
                       </span>
                     </div>
                     <div className="flex items-baseline gap-1">
                       <span className="font-bold text-[9px] w-14">DESIGNATION</span>
-                      <span className="flex-1 border-b border-black text-[10px] pb-0.5 truncate">
-                        {formData.recommendedByDesignation || `Head of ${employee.department}`}
+                      <span className="flex-1 border-b border-black text-[10px] pb-0.5 truncate min-h-[16px]">
+                        {formData.recommendedByDesignation || <span className="text-transparent select-none">&nbsp;</span>}
                       </span>
                     </div>
                     <div className="flex justify-between items-end pt-3 text-[9px]">
                       <span>(Signature)</span>
-                      <span>(Date: {formData.recommendedByDate || '2026-09-22'})</span>
+                      <span>(Date: {formData.recommendedByDate || '________'})</span>
                     </div>
                   </div>
                 </div>
